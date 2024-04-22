@@ -1,0 +1,31 @@
+{
+  "name": "tiny-gea3-api",
+  "keywords": "tiny",
+  "description": "Library for interacting with GEA3 appliances using the tiny HAL.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/geappliances/tiny-gea3-api.git"
+  },
+  "authors": [
+    {
+      "name": "GE Appliances Embedded",
+      "email": "embedded-open-source@geappliances.com",
+      "maintainer": true
+    }
+  ],
+  "version": "1.0.0",
+  "frameworks": "*",
+  "platforms": "*",
+  "export": {
+    "include": [
+      "include/*",
+      "src/*"
+    ]
+  },
+  "dependencies": [
+    {
+      "name": "tiny",
+      "version": "^6.3.0"
+    }
+  ]
+}
