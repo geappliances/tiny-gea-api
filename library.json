@@ -1,0 +1,31 @@
+{
+  "name": "home-assistant-bridge",
+  "keywords": "Home Assistant",
+  "description": "Library that publishes GEA3-hosted ERDs to and allows writes from Home Assistant via MQTT.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/geappliances/home-assistant-bridge.git"
+  },
+  "authors": [
+    {
+      "name": "GE Appliances Embedded",
+      "email": "embedded-open-source@geappliances.com",
+      "maintainer": true
+    }
+  ],
+  "version": "1.0.0",
+  "frameworks": "Arduino",
+  "platforms": "*",
+  "export": {
+    "include": [
+      "include/*",
+      "src/*"
+    ]
+  },
+  "dependencies": [
+    {
+      "name": "tiny",
+      "version": "^6.3.0"
+    }
+  ]
+}
