@@ -1,7 +1,7 @@
 # tiny-gea3-api
 [![Tests](https://github.com/geappliances/tiny-gea3-api/actions/workflows/test.yml/badge.svg)](https://github.com/geappliances/tiny-gea3-api/actions/workflows/test.yml)
 
-PlatformIO library for interacting with GE Appliances products supporting the full-duples GEA3 serial protocol using the [`tiny`](https://github.com/ryanplusplus/tiny) HAL. Note that this does not support older GE Appliances products using the single-wire GEA2 interface.
+PlatformIO library for interacting with GE Appliances products supporting the full-duplex GEA3 serial protocol using the [`tiny`](https://github.com/ryanplusplus/tiny) HAL. Note that this does not support older GE Appliances products using the single-wire GEA2 interface.
 
 ## Components
 ### `tiny_gea3_interface`
