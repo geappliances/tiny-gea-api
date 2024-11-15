@@ -6,18 +6,17 @@
  */
 
 extern "C" {
-#include "Gea2Constants.h"
-#include "Gea2Packet.h"
-#include "TinyEvent_Synchronous.h"
-#include "TinyGea2Interface_SingleWire.h"
-#include "utils.h"
+#include <string.h>
+#include "tiny_gea3_constants.h"
+#include "tiny_gea3_interface.h"
+#include "tiny_gea3_packet.h"
+#include "tiny_utils.h"
 }
 
 #include "CppUTest/TestHarness.h"
 #include "CppUTestExt/MockSupport.h"
-#include "MemoryUtils.h"
-#include "TinyTimeSource_TestDouble.h"
-#include "TinyUart_TestDouble.h"
+#include "double/tiny_uart_double.hpp"
+#include "tiny_utils.h"
 
 enum {
   Address = 0xAD,
@@ -28,12 +27,12 @@ enum {
 
 TEST_GROUP(TinyGea2Interface_SingleWire)
 {
-  TinyGea2Interface_SingleWire_t instance;
-  TinyUart_TestDouble_t uart;
-  TinyEventSubscription_t receiveSubscription;
+  tiny_gea2_interface_single_wire_t instance;
+  tiny_uart_test_double_t uart;
+  tiny_event_subscription_t receiveSubscription;
   uint8_t sendBuffer[SendBufferSize];
   uint8_t receiveBuffer[ReceiveBufferSize];
-  TinyTimeSource_TestDouble_t timeSource;
+  tiny_time timeSource;
   TinyEvent_Synchronous_t msecInterrupt;
 
   void setup()
