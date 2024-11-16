@@ -14,4 +14,5 @@ Provides a simple interface for reading and writing addressable data (ERDs) over
 
 1. Clone the repo
 2. Install Cpputest with `apt install cpputest` on linux or `brew install cpputest` on mac
+   1. TODO: Add details of mac specific fix here
 3. Run tests with `make test`
