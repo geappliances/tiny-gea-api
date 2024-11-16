@@ -250,13 +250,23 @@ static void send(
   send_worker(_self, destination, payload_length, callback, context, true);
 }
 
+static void forward(
+  i_tiny_gea3_interface_t* _self,
+  uint8_t destination,
+  uint8_t payload_length,
+  tiny_gea3_interface_send_callback_t callback,
+  void* context)
+{
+  send_worker(_self, destination, payload_length, callback, context, false);
+}
+
 static i_tiny_event_t* on_receive(i_tiny_gea3_interface_t* _self)
 {
   reinterpret(self, _self, self_t*);
   return &self->on_receive.interface;
 }
 
-static const i_tiny_gea3_interface_api_t api = { send, on_receive };
+static const i_tiny_gea3_interface_api_t api = { send, forward, on_receive };
 
 void tiny_gea3_interface_init(
   tiny_gea3_interface_t* self,

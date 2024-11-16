@@ -33,6 +33,13 @@ typedef struct i_tiny_gea3_interface_api_t {
     tiny_gea3_interface_send_callback_t callback,
     void* context);
 
+  void (*forward)(
+    i_tiny_gea3_interface_t* self,
+    uint8_t destination,
+    uint8_t payload_length,
+    tiny_gea3_interface_send_callback_t callback,
+    void* context);
+
   i_tiny_event_t* (*on_receive)(i_tiny_gea3_interface_t* self);
 } i_tiny_gea3_interface_api_t;
 
@@ -50,6 +57,19 @@ static inline void tiny_gea3_interface_send(
   void* context)
 {
   self->api->send(self, destination, payload_length, callback, context);
+}
+
+/*!
+ * Send a packet without setting source address
+ */
+static inline void tiny_gea3_interface_forward(
+  i_tiny_gea3_interface_t* self,
+  uint8_t destination,
+  uint8_t payload_length,
+  tiny_gea3_interface_send_callback_t callback,
+  void* context)
+{
+  self->api->forward(self, destination, payload_length, callback, context);
 }
 
 /*!

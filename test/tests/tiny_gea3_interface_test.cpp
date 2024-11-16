@@ -129,6 +129,11 @@ TEST_GROUP(tiny_gea3_interface)
     tiny_gea3_interface_send(&self.interface, packet->destination, packet->payload_length, send_callback, packet);
   }
 
+  void when_packet_is_forwarded(tiny_gea3_packet_t * packet)
+  {
+    tiny_gea3_interface_forward(&self.interface, packet->destination, packet->payload_length, send_callback, packet);
+  }
+
   void given_that_a_packet_has_been_sent()
   {
     should_send_bytes_via_uart(
@@ -179,6 +184,23 @@ TEST(tiny_gea3_interface, should_send_a_packet_with_no_payload)
   tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
   when_packet_is_sent(packet);
+}
+
+TEST(tiny_gea3_interface, should_forward_a_packet_without_changing_source_address)
+{
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
+    0x45, // dst
+    0x07, // len
+    address + 1, // src
+    0x4D, // crc
+    0x5A,
+    tiny_gea3_etx);
+
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  packet->destination = 0x45;
+  packet->source = address + 1;
+  when_packet_is_forwarded(packet);
 }
 
 TEST(tiny_gea3_interface, should_send_a_packet_with_a_payload)
