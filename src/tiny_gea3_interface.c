@@ -58,7 +58,7 @@ static bool received_packet_is_addressed_to_me(self_t* self)
   reinterpret(packet, self->receive_buffer, tiny_gea3_packet_t*);
   return (packet->destination == self->address) ||
     (packet->destination == tiny_gea3_broadcast_address) ||
-    (self->ignoreDestinationAddress);
+    (self->ignore_destination_address);
 }
 
 static void buffer_received_byte(self_t* self, uint8_t byte)
@@ -285,7 +285,7 @@ void tiny_gea3_interface_init(
   uint8_t receive_buffer_size,
   uint8_t* send_queue_buffer,
   size_t send_queue_buffer_size,
-  bool ignoreDestinationAddress)
+  bool ignore_destination_address)
 {
   self->interface.api = &api;
 
@@ -295,7 +295,7 @@ void tiny_gea3_interface_init(
   self->send_buffer_size = send_buffer_size;
   self->receive_buffer = receive_buffer;
   self->receive_buffer_size = receive_buffer_size;
-  self->ignoreDestinationAddress = ignoreDestinationAddress;
+  self->ignore_destination_address = ignore_destination_address;
   self->receive_escaped = false;
   self->send_in_progress = false;
   self->send_escaped = false;

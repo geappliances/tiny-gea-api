@@ -51,7 +51,7 @@ typedef struct {
   bool receive_escaped;
   bool stx_received;
 
-  bool ignoreDestinationAddress;
+  bool ignore_destination_address;
 } tiny_gea3_interface_t;
 
 /*!
@@ -67,7 +67,7 @@ void tiny_gea3_interface_init(
   uint8_t receive_buffer_size,
   uint8_t* send_queue_buffer,
   size_t send_queue_buffer_size,
-  bool ignoreDestinationAddress);
+  bool ignore_destination_address);
 
 /*!
  * Run the interface and publish received packets.
