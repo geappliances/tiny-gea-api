@@ -7,7 +7,7 @@
 #include "double/tiny_gea3_interface_double.hpp"
 #include "tiny_utils.h"
 
-static void send(
+static bool send(
   i_tiny_gea3_interface_t* _self,
   uint8_t destination,
   uint8_t payload_length,
@@ -26,9 +26,11 @@ static void send(
     .withParameter("source", self->packet.source)
     .withParameter("destination", self->packet.destination)
     .withMemoryBufferParameter("payload", self->packet.payload, payload_length);
+
+  return true;
 }
 
-static void forward(
+static bool forward(
   i_tiny_gea3_interface_t* _self,
   uint8_t destination,
   uint8_t payload_length,
@@ -46,6 +48,8 @@ static void forward(
     .withParameter("source", self->packet.source)
     .withParameter("destination", self->packet.destination)
     .withMemoryBufferParameter("payload", self->packet.payload, payload_length);
+
+  return true;
 }
 
 static i_tiny_event_t* on_receive(i_tiny_gea3_interface_t* _self)
