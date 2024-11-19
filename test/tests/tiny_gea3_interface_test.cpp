@@ -506,8 +506,8 @@ TEST(tiny_gea3_interface, should_drop_packets_addressed_to_other_nodes)
     0x08, // len
     0x45, // src
     0xBF, // payload
-    0x71, // crc
-    0x40,
+    0xEF, // crc
+    0xD1,
     tiny_gea3_etx);
 
   nothing_should_happen();
