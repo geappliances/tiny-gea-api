@@ -55,13 +55,31 @@ TEST_GROUP(tiny_gea3_interface)
       receive_buffer,
       sizeof(receive_buffer),
       send_queue,
-      sizeof(send_queue));
+      sizeof(send_queue),
+      false);
 
     tiny_event_subscription_init(&receive_subscription, NULL, packet_received);
 
     tiny_event_subscribe(tiny_gea3_interface_on_receive(&self.interface), &receive_subscription);
 
     tiny_uart_double_configure_automatic_send_complete(&uart, true);
+  }
+
+  void given_the_interface_is_ignoring_destination_addresses()
+  {
+    tiny_gea3_interface_init(
+      &self,
+      &uart.interface,
+      address,
+      send_buffer,
+      sizeof(send_buffer),
+      receive_buffer,
+      sizeof(receive_buffer),
+      send_queue,
+      sizeof(send_queue),
+      true);
+
+    tiny_event_subscribe(tiny_gea3_interface_on_receive(&self.interface), &receive_subscription);
   }
 
   static void packet_received(void*, const void* _args)
@@ -511,6 +529,28 @@ TEST(tiny_gea3_interface, should_drop_packets_addressed_to_other_nodes)
     tiny_gea3_etx);
 
   nothing_should_happen();
+  after_the_interface_is_run();
+}
+
+TEST(tiny_gea3_interface, should_receive_packets_with_any_address_when_ignoring_destination)
+{
+  given_the_interface_is_ignoring_destination_addresses();
+
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address + 1, // dst
+    0x08, // len
+    0x45, // src
+    0xBF, // payload
+    0xEF, // crc
+    0xD1,
+    tiny_gea3_etx);
+
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  packet->destination = address + 1;
+  packet->source = 0x45;
+  packet->payload[0] = 0xBF;
+  packet_should_be_received(packet);
   after_the_interface_is_run();
 }
 
