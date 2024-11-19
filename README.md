@@ -11,8 +11,17 @@ Provides a simple interface for sending and receiving GEA3 serial packets.
 Provides a simple interface for reading and writing addressable data (ERDs) over a GEA3 serial interface.
 
 ## Dev Environment
-
 1. Clone the repo
-2. Install Cpputest with `apt install cpputest` on linux or `brew install cpputest` on mac
-   1. TODO: Add details of mac specific fix here
+2. Install Cpputest
 3. Run tests with `make test`
+
+### Installing Cpputest on Linux
+1. Run `sudo apt install cpputest`.
+
+### Installing Cpputest on MacOS
+1. Run `brew install cpputest`
+2. Add these lines to `~/.bash_profile` after `eval "$(/opt/homebrew/bin/brew shellenv)"` on macOS:
+   ```
+   export CPATH="$CPATH:$(brew --prefix)/include"
+   export LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
+   ```
