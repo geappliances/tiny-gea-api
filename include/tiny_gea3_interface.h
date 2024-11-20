@@ -25,7 +25,7 @@ typedef struct {
   i_tiny_gea3_interface_t interface;
 
   tiny_event_t on_receive;
-  tiny_event_subscription_t byte_received_subscfription;
+  tiny_event_subscription_t byte_received_subscription;
   tiny_event_subscription_t byte_sent_subscription;
   i_tiny_uart_t* uart;
   uint8_t* send_buffer;
@@ -50,6 +50,8 @@ typedef struct {
   bool send_escaped;
   bool receive_escaped;
   bool stx_received;
+
+  bool ignore_destination_address;
 } tiny_gea3_interface_t;
 
 /*!
@@ -64,7 +66,8 @@ void tiny_gea3_interface_init(
   uint8_t* receive_buffer,
   uint8_t receive_buffer_size,
   uint8_t* send_queue_buffer,
-  size_t send_queue_buffer_size);
+  size_t send_queue_buffer_size,
+  bool ignore_destination_address);
 
 /*!
  * Run the interface and publish received packets.

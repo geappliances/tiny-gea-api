@@ -7,7 +7,7 @@
 #include "double/tiny_gea3_interface_double.hpp"
 #include "tiny_utils.h"
 
-static void send(
+static bool send(
   i_tiny_gea3_interface_t* _self,
   uint8_t destination,
   uint8_t payload_length,
@@ -26,6 +26,30 @@ static void send(
     .withParameter("source", self->packet.source)
     .withParameter("destination", self->packet.destination)
     .withMemoryBufferParameter("payload", self->packet.payload, payload_length);
+
+  return true;
+}
+
+static bool forward(
+  i_tiny_gea3_interface_t* _self,
+  uint8_t destination,
+  uint8_t payload_length,
+  tiny_gea3_interface_send_callback_t callback,
+  void* context)
+{
+  reinterpret(self, _self, tiny_gea3_interface_double_t*);
+  self->packet.destination = destination;
+  self->packet.payload_length = payload_length;
+  callback(context, &self->packet);
+
+  mock()
+    .actualCall("forward")
+    .onObject(self)
+    .withParameter("source", self->packet.source)
+    .withParameter("destination", self->packet.destination)
+    .withMemoryBufferParameter("payload", self->packet.payload, payload_length);
+
+  return true;
 }
 
 static i_tiny_event_t* on_receive(i_tiny_gea3_interface_t* _self)
@@ -34,7 +58,7 @@ static i_tiny_event_t* on_receive(i_tiny_gea3_interface_t* _self)
   return &self->on_receive.interface;
 }
 
-static const i_tiny_gea3_interface_api_t api = { send, on_receive };
+static const i_tiny_gea3_interface_api_t api = { send, forward, on_receive };
 
 void tiny_gea3_interface_double_init(tiny_gea3_interface_double_t* self, uint8_t address)
 {
