@@ -9,7 +9,7 @@
       "type": "cppdbg",
       "request": "launch",
       "preLaunchTask": "Build",
-      "program": "${workspaceFolder}/build/home-assistant-bridge_tests",
+      "program": "${workspaceFolder}/build/arduino-gea3-api_tests",
       "args": [],
       "stopAtEntry": true,
       "cwd": "${workspaceFolder}",

@@ -6,7 +6,7 @@
     {
       "label": "Build",
       "type": "shell",
-      "command": "make build/home-assistant-bridge_tests"
+      "command": "make test"
     }
   ]
 }

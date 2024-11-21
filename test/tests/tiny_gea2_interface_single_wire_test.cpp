@@ -7,404 +7,381 @@
 
 extern "C" {
 #include <string.h>
+#include "tiny_gea2_single_wire_interface.h"
 #include "tiny_gea3_constants.h"
 #include "tiny_gea3_interface.h"
 #include "tiny_gea3_packet.h"
+#include "tiny_timer.h"
 #include "tiny_utils.h"
 }
 
 #include "CppUTest/TestHarness.h"
 #include "CppUTestExt/MockSupport.h"
+#include "double/tiny_time_source_double.hpp"
 #include "double/tiny_uart_double.hpp"
 #include "tiny_utils.h"
 
 enum {
-  Address = 0xAD,
-  SendBufferSize = 10,
-  ReceiveBufferSize = 9,
-  IdleCooldownMsec = 10 + (Address & 0x1F),
+  address = 0xAD,
+  sendBufferSize = 10,
+  receive_buffer_size = 9,
+  idle_cooldown_msec = 10 + (address & 0x1F),
+  gea2_reflection_timeout_msec = 6,
+  tiny_gea3_ack_timeout_msec = 6,
+  gea2_broadcast_mask = 1, // IDK WHAT THIS IS BUT FIX IT
+  default_retries = 5,
+  gea2_packet_transmission_overhead = 3,
+  gea2_interbyte_timeout_msec = 6,
+
 };
 
-TEST_GROUP(TinyGea2Interface_SingleWire)
+TEST_GROUP(tiny_gea2_interface_single_wire)
 {
   tiny_gea2_interface_single_wire_t instance;
-  tiny_uart_test_double_t uart;
+  tiny_uart_double_t uart;
   tiny_event_subscription_t receiveSubscription;
-  uint8_t sendBuffer[SendBufferSize];
-  uint8_t receiveBuffer[ReceiveBufferSize];
-  tiny_time timeSource;
-  TinyEvent_Synchronous_t msecInterrupt;
+  uint8_t sendBuffer[sendBufferSize];
+  uint8_t receive_buffer[receive_buffer_size];
+  tiny_time_source_double_t time_source;
+  tiny_event_t msecInterrupt;
 
   void setup()
   {
-    ASSUME_UNINITIALIZED(instance);
+    tiny_event_init(&msecInterrupt);
 
-    TinyEvent_Synchronous_Init(&msecInterrupt);
+    tiny_uart_double_init(&uart);
+    tiny_time_source_double_init(&time_source);
 
-    TinyUart_TestDouble_Init(&uart);
-    TinyTimeSource_TestDouble_Init(&timeSource);
-
-    TinyGea2Interface_SingleWire_Init(
+    tiny_gea2_interface_single_wire_init(
       &instance,
       &uart.interface,
-      &timeSource.interface,
+      &time_source.interface,
       &msecInterrupt.interface,
-      receiveBuffer,
-      ReceiveBufferSize,
+      receive_buffer,
+      receive_buffer_size,
       sendBuffer,
-      SendBufferSize,
-      Address,
+      sendBufferSize,
+      address,
       false);
 
-    TinyEventSubscription_Init(&receiveSubscription, NULL, PacketReceived);
-    TinyEvent_Subscribe(TinyGea2Interface_GetOnReceiveEvent(&instance.interface), &receiveSubscription);
+    tiny_event_subscription_init(&receiveSubscription, NULL, packet_received);
+    tiny_event_subscribe(tiny_gea3_interface_on_receive(&instance.interface), &receiveSubscription);
   }
 
-  void GivenThatIgnoreDestinationAddressIsEnabled()
+  void given_that_ignore_destination_address_is_enabled()
   {
-    TinyGea2Interface_SingleWire_Init(
+    tiny_gea2_interface_single_wire_init(
       &instance,
       &uart.interface,
-      &timeSource.interface,
+      &time_source.interface,
       &msecInterrupt.interface,
-      receiveBuffer,
-      ReceiveBufferSize,
+      receive_buffer,
+      receive_buffer_size,
       sendBuffer,
-      SendBufferSize,
-      Address,
+      sendBufferSize,
+      address,
       true);
 
-    TinyEvent_Subscribe(TinyGea2Interface_GetOnReceiveEvent(&instance.interface), &receiveSubscription);
+    tiny_event_subscribe(tiny_gea3_interface_on_receive(&instance.interface), &receiveSubscription);
   }
 
-  void GivenThatADiagnosticsEventSubscriptionIsActive()
+  void given_that_retries_have_been_set_to(uint8_t retries)
   {
-    static TinyEventSubscription_t diagnosticsSubscription;
-    TinyEventSubscription_Init(
-      &diagnosticsSubscription, NULL, +[](void*, const void* _args) {
-        auto args = reinterpret_cast<const TinyGea2InterfaceOnDiagnosticsEventArgs_t*>(_args);
-        mock().actualCall("DiagnosticsEvent").withParameter("type", args->type);
-      });
-    TinyEvent_Subscribe(TinyGea2Interface_GetOnDiagnosticsEvent(&instance.interface), &diagnosticsSubscription);
+    tiny_gea2_interface_single_wire_set_retries(&instance, retries);
   }
 
-  void GivenThatRetriesHaveBeenSetTo(uint8_t retries)
+  static void packet_received(void*, const void* _args)
   {
-    TinyGea2Interface_SingleWire_SetRetries(&instance, retries);
+    reinterpret(args, _args, const tiny_gea3_interface_on_receive_args_t*);
+    mock()
+      .actualCall("packet_received")
+      .withParameter("source", args->packet->source)
+      .withParameter("destination", args->packet->destination)
+      .withMemoryBufferParameter("payload", args->packet->payload, args->packet->payload_length);
   }
 
-#define ShouldRaiseDiagnosticsEvent(_type) \
-  _ShouldRaiseDiagnosticsEvent(TinyGea2InterfaceDiagnosticsEventType_##_type)
-  void _ShouldRaiseDiagnosticsEvent(TinyGea2InterfaceDiagnosticsEventType_t type)
+  void when_byte_is_received(uint8_t byte)
   {
-    mock().expectOneCall("DiagnosticsEvent").withParameter("type", type);
+    tiny_uart_double_trigger_receive(&uart, byte);
   }
 
-  static void PacketReceived(void*, const void* _args)
-  {
-    REINTERPRET(args, _args, const TinyGea2InterfaceOnReceiveArgs_t*);
-    mock().actualCall("PacketReceived").withParameterOfType("Gea2Packet_t", "packet", args->packet);
-  }
-
-  void WhenByteIsReceived(uint8_t byte)
-  {
-    TinyUart_TestDouble_TriggerReceive(&uart, byte);
-  }
-
-#define ShouldSendBytesViaUart(_bytes...)   \
-  do {                                      \
-    uint8_t bytes[] = { _bytes };           \
-    _ShouldSendBytes(bytes, sizeof(bytes)); \
+#define should_send_bytes_via_uart(_bytes...) \
+  do {                                        \
+    uint8_t bytes[] = { _bytes };             \
+    _ShouldsendBytes(bytes, sizeof(bytes));   \
   } while(0)
-  void _ShouldSendBytes(const uint8_t* bytes, uint16_t byteCount)
+  void _ShouldsendBytes(const uint8_t* bytes, uint16_t byteCount)
   {
     for(uint16_t i = 0; i < byteCount; i++) {
-      ByteShouldBeSent(bytes[i]);
+      byte_should_be_sent(bytes[i]);
     }
   }
 
-#define AfterBytesAreReceivedViaUart(_bytes...)          \
-  do {                                                   \
-    uint8_t bytes[] = { _bytes };                        \
-    _AfterBytesAreReceivedViaUart(bytes, sizeof(bytes)); \
+#define after_bytes_are_received_via_uart(_bytes...)          \
+  do {                                                        \
+    uint8_t bytes[] = { _bytes };                             \
+    _after_bytes_are_received_via_uart(bytes, sizeof(bytes)); \
   } while(0)
 
-  void _AfterBytesAreReceivedViaUart(const uint8_t* bytes, uint16_t byteCount)
+  void _after_bytes_are_received_via_uart(const uint8_t* bytes, uint16_t byteCount)
   {
     for(uint16_t i = 0; i < byteCount; i++) {
-      WhenByteIsReceived(bytes[i]);
+      when_byte_is_received(bytes[i]);
     }
   }
 
-  void PacketShouldBeReceived(const Gea2Packet_t* packet)
+  void packet_should_be_received(const tiny_gea3_packet_t* packet)
   {
-    mock().expectOneCall("PacketReceived").withParameterOfType("Gea2Packet_t", "packet", packet);
+    mock()
+      .expectOneCall("packet_received")
+      .withParameter("source", packet->source)
+      .withParameter("destination", packet->destination)
+      .withMemoryBufferParameter("payload", packet->payload, packet->payload_length);
   }
 
-  void ByteShouldBeSent(uint8_t byte)
+  void byte_should_be_sent(uint8_t byte)
   {
-    mock().expectOneCall("Send").onObject(&uart).withParameter("byte", byte);
+    mock().expectOneCall("send").onObject(&uart).withParameter("byte", byte);
   }
 
-  void AckShouldBeSent()
+  void ack_should_be_sent()
   {
-    mock().expectOneCall("Send").onObject(&uart).withParameter("byte", Gea2Ack);
+    mock().expectOneCall("send").onObject(&uart).withParameter("byte", tiny_gea3_ack);
   }
 
-  void AfterTheInterfaceIsRun()
+  void after_the_interface_is_run()
   {
-    TinyGea2Interface_SingleWire_Run(&instance);
+    tiny_gea2_interface_single_wire_run(&instance);
   }
 
-  void NothingShouldHappen()
+  void nothing_should_happen()
   {
   }
 
-  void After(TinyTimeSourceTickCount_t ticks)
+  void after(tiny_time_source_ticks_t ticks)
   {
     for(uint32_t i = 0; i < ticks; i++) {
-      TinyTimeSource_TestDouble_TickOnce(&timeSource);
-      AfterMsecInterruptFires();
+      tiny_time_source_double_tick(&time_source, 1);
+      after_msec_interrupt_fires();
     }
   }
 
-  void GivenTheModuleIsInCooldownAfterReceivingAMessage()
+  void given_the_module_is_in_cooldown_after_receiving_a_message()
   {
     mock().disable();
-    AfterBytesAreReceivedViaUart(
-      Gea2Stx,
-      Address, // dst
+    after_bytes_are_received_via_uart(
+      tiny_gea3_stx,
+      address, // dst
       0x08, // len
       0x45, // src
       0xBF, // payload
       0x74, // crc
       0x0D,
-      Gea2Etx);
+      tiny_gea3_etx);
 
-    AfterTheInterfaceIsRun();
+    after_the_interface_is_run();
     mock().enable();
   }
 
-  static void SendCallback(void* context, Gea2Packet_t* packet)
+  static void sendCallback(void* context, tiny_gea3_packet_t* packet)
   {
-    REINTERPRET(sourcePacket, context, const Gea2Packet_t*);
+    reinterpret(sourcePacket, context, const tiny_gea3_packet_t*);
     packet->source = sourcePacket->source;
-    memcpy(packet->payload, sourcePacket->payload, sourcePacket->payloadLength);
+    memcpy(packet->payload, sourcePacket->payload, sourcePacket->payload_length);
   }
 
-  void WhenPacketIsSent(Gea2Packet_t * packet)
+  void when_packet_is_sent(tiny_gea3_packet_t * packet)
   {
-    TinyGea2Interface_Send(&instance.interface, packet->destination, packet->payloadLength, SendCallback, packet);
-    AfterMsecInterruptFires();
+    tiny_gea3_interface_send(&instance.interface, packet->destination, packet->payload_length, sendCallback, packet);
+    after_msec_interrupt_fires();
   }
 
-  void GivenTheUartTestDoubleIsEchoing()
+  void when_packet_is_forwarded(tiny_gea3_packet_t * packet)
   {
-    TinyUart_TestDouble_EnableEcho(&uart);
+    tiny_gea3_interface_send(&instance.interface, packet->destination, packet->payload_length, sendCallback, packet);
+    after_msec_interrupt_fires();
   }
 
-  void WhenPacketIsForwarded(Gea2Packet_t * packet)
+  void given_that_a_send_is_in_progress()
   {
-    TinyGea2Interface_Forward(&instance.interface, packet->destination, packet->payloadLength, SendCallback, packet);
-    AfterMsecInterruptFires();
-  }
+    should_send_bytes_via_uart(tiny_gea3_stx);
 
-  void ShouldNotBeSending()
-  {
-    CHECK_FALSE(TinyGea2Interface_Sending(&instance.interface));
-  }
-
-  void ShouldBeSending()
-  {
-    CHECK_TRUE(TinyGea2Interface_Sending(&instance.interface));
-  }
-
-  void GivenThatASendIsInProgress()
-  {
-    ShouldSendBytesViaUart(Gea2Stx);
-
-    STATIC_ALLOC_GEA2PACKET(packet, 1);
+    tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
     packet->destination = 0x45;
     packet->payload[0] = 0xC8;
-    WhenPacketIsSent(packet);
+    when_packet_is_sent(packet);
   }
 
-  void GivenThatAPacketHasBeenSent()
+  void gjven_that_a_packet_has_been_sent()
   {
-    GivenTheUartTestDoubleIsEchoing();
-
-    ShouldSendBytesViaUart(
-      Gea2Stx,
+    should_send_bytes_via_uart(
+      tiny_gea3_stx,
       0x45, // dst
       0x07, // len
-      Address, // src
+      address, // src
       0x7D, // crc
       0x39,
-      Gea2Etx);
+      tiny_gea3_etx);
 
-    STATIC_ALLOC_GEA2PACKET(packet, 0);
+    tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
     packet->destination = 0x45;
-    WhenPacketIsSent(packet);
+    when_packet_is_sent(packet);
   }
 
-  void ThePacketShouldBeResent()
+  void the_packet_should_be_resent()
   {
-    ShouldSendBytesViaUart(
-      Gea2Stx,
+    should_send_bytes_via_uart(
+      tiny_gea3_stx,
       0x45, // dst
       0x07, // len
-      Address, // src
+      address, // src
       0x7D, // crc
       0x39,
-      Gea2Etx);
+      tiny_gea3_etx);
   }
 
-  void GivenThatABroadcastPacketHasBeenSent()
+  void given_that_a_broadcast_packet_has_been_sent()
   {
-    GivenTheUartTestDoubleIsEchoing();
-
-    ShouldSendBytesViaUart(
-      Gea2Stx,
+    should_send_bytes_via_uart(
+      tiny_gea3_stx,
       0xFF, // dst
       0x07, // len
-      Address, // src
+      address, // src
       0x44, // crc
       0x07,
-      Gea2Etx);
+      tiny_gea3_etx);
 
-    STATIC_ALLOC_GEA2PACKET(packet, 0);
+    tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
     packet->destination = 0xFF;
-    WhenPacketIsSent(packet);
+    when_packet_is_sent(packet);
   }
 
-  void GivenTheModuleIsInIdleCooldown()
+  void given_uart_echoing_is_enabled()
   {
-    GivenTheUartTestDoubleIsEchoing();
+    tiny_uart_double_enable_echo(&uart);
+  }
 
-    ShouldSendBytesViaUart(
-      Gea2Stx,
+  void given_the_module_is_in_idle_cooldown()
+  {
+    should_send_bytes_via_uart(
+      tiny_gea3_stx,
       0x45, // dst
       0x07, // len
-      Address, // src
+      address, // src
       0x7D, // crc
       0x39,
-      Gea2Etx);
+      tiny_gea3_etx);
 
-    STATIC_ALLOC_GEA2PACKET(packet, 0);
+    tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
     packet->destination = 0x45;
-    WhenPacketIsSent(packet);
+    when_packet_is_sent(packet);
 
-    AfterBytesAreReceivedViaUart(Gea2Ack);
+    after_bytes_are_received_via_uart(tiny_gea3_ack);
   }
 
-  void ShouldBeAbleToSendAMessageAfterIdleCooldown()
+  void should_be_able_to_send_a_message_after_idle_cooldown()
   {
-    GivenTheUartTestDoubleIsEchoing();
-
-    ShouldSendBytesViaUart(
-      Gea2Stx,
+    should_send_bytes_via_uart(
+      tiny_gea3_stx,
       0x45, // dst
       0x07, // len
-      Address, // src
+      address, // src
       0x7D, // crc
       0x39,
-      Gea2Etx);
+      tiny_gea3_etx);
 
-    STATIC_ALLOC_GEA2PACKET(packet, 0);
+    tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
     packet->destination = 0x45;
-    WhenPacketIsSent(packet);
+    when_packet_is_sent(packet);
 
-    After(IdleCooldownMsec);
+    after(idle_cooldown_msec);
   }
 
-  void ShouldBeAbleToSendAMessageAfterCoolisionCooldown()
+  void should_be_able_to_send_a_message_after_collision_cooldown()
   {
-    GivenTheUartTestDoubleIsEchoing();
-
-    STATIC_ALLOC_GEA2PACKET(packet, 0);
+    tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
     packet->destination = 0x45;
-    WhenPacketIsSent(packet);
+    when_packet_is_sent(packet);
 
-    ShouldSendBytesViaUart(
-      Gea2Stx,
+    should_send_bytes_via_uart(
+      tiny_gea3_stx,
       0x45, // dst
       0x07, // len
-      Address, // src
+      address, // src
       0x7D, // crc
       0x39,
-      Gea2Etx);
+      tiny_gea3_etx);
 
-    After(CollisionTimeoutMsec());
+    after(collision_timeout_msec());
   }
 
-  void GivenTheModuleIsInCollisionCooldown()
+  void given_the_module_is_in_collision_cooldown()
   {
-    ShouldSendBytesViaUart(Gea2Stx);
-    STATIC_ALLOC_GEA2PACKET(packet, 0);
+    should_send_bytes_via_uart(tiny_gea3_stx);
+    tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
     packet->destination = 0x45;
-    WhenPacketIsSent(packet);
-    ShouldBeSending();
+    when_packet_is_sent(packet);
 
-    AfterBytesAreReceivedViaUart(Gea2Stx - 1);
+    after_bytes_are_received_via_uart(tiny_gea3_stx - 1);
   }
 
-  TinyTimeSourceTickCount_t CollisionTimeoutMsec()
+  tiny_time_source_ticks_t collision_timeout_msec()
   {
-    return 43 + (Address & 0x1F) + ((timeSource._private.ticks ^ Address) & 0x1F);
+    return 43 + (address & 0x1F) + ((time_source.ticks ^ address) & 0x1F);
   }
 
-  void AfterMsecInterruptFires()
+  void after_msec_interrupt_fires()
   {
-    TinyEvent_Synchronous_Publish(&msecInterrupt, NULL);
+    tiny_event_publish(&msecInterrupt, NULL);
   }
 };
 
-TEST(TinyGea2Interface_SingleWire, ShouldReceiveAPacketWithNoPayloadAndSendAnAck)
+TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_with_no_payload_and_send_an_ack)
 {
-  AckShouldBeSent();
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  ack_should_be_sent();
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x07, // len
     0x45, // src
     0x08, // crc
     0x8F,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
-  packet->destination = Address;
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  packet->destination = address;
   packet->source = 0x45;
-  PacketShouldBeReceived(packet);
-  AfterTheInterfaceIsRun();
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldReceiveAPacketWithAPayload)
+TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_with_a_payload)
 {
-  AckShouldBeSent();
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  ack_should_be_sent();
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0x74, // crc
     0x0D,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
-  packet->destination = Address;
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
-  PacketShouldBeReceived(packet);
-  AfterTheInterfaceIsRun();
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldReceiveAPacketWithMaximumPayload)
+TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_with_maximum_payload)
 {
-  AckShouldBeSent();
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  ack_should_be_sent();
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x0B, // len
     0x45, // src
     0x01, // payload
@@ -413,44 +390,38 @@ TEST(TinyGea2Interface_SingleWire, ShouldReceiveAPacketWithMaximumPayload)
     0x04,
     0x94, // crc
     0x48,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 4);
-  packet->destination = Address;
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 4);
+  packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = 0x01;
   packet->payload[1] = 0x02;
   packet->payload[2] = 0x03;
   packet->payload[3] = 0x04;
-  PacketShouldBeReceived(packet);
-  AfterTheInterfaceIsRun();
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldRaisePacketReceivedDiagnosticsEventWhenAPacketIsReceived)
+TEST(tiny_gea2_interface_single_wire, should_raise_packet_received_diagnostics_event_when_a_packet_is_received)
 {
-  GivenThatADiagnosticsEventSubscriptionIsActive();
-
-  ShouldRaiseDiagnosticsEvent(PacketReceived);
-  AckShouldBeSent();
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  ack_should_be_sent();
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0x74, // crc
     0x0D,
-    Gea2Etx);
+    tiny_gea3_etx);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldDropPacketsWithPayloadsThatAreTooLarge)
+TEST(tiny_gea2_interface_single_wire, should_drop_packets_with_payloads_that_are_too_large)
 {
-  GivenThatADiagnosticsEventSubscriptionIsActive();
-
-  ShouldRaiseDiagnosticsEvent(ReceivedPacketDroppedBecauseOfInvalidLength);
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x0C, // len
     0x45, // src
     0x01, // payload
@@ -460,419 +431,407 @@ TEST(TinyGea2Interface_SingleWire, ShouldDropPacketsWithPayloadsThatAreTooLarge)
     0x05,
     0x51, // crc
     0x4B,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  NothingShouldHappen();
-  AfterTheInterfaceIsRun();
+  nothing_should_happen();
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldReceiveAPacketWithEscapes)
+TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_with_escapes)
 {
-  AckShouldBeSent();
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  ack_should_be_sent();
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x0B, // len
     0x45, // src
-    Gea2Esc, // payload
-    Gea2Esc,
-    Gea2Esc,
-    Gea2Ack,
-    Gea2Esc,
-    Gea2Stx,
-    Gea2Esc,
-    Gea2Etx,
+    tiny_gea3_esc, // payload
+    tiny_gea3_esc,
+    tiny_gea3_esc,
+    tiny_gea3_ack,
+    tiny_gea3_esc,
+    tiny_gea3_stx,
+    tiny_gea3_esc,
+    tiny_gea3_etx,
     0x31, // crc
     0x3D,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 4);
-  packet->destination = Address;
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 4);
+  packet->destination = address;
   packet->source = 0x45;
-  packet->payload[0] = Gea2Esc;
-  packet->payload[1] = Gea2Ack;
-  packet->payload[2] = Gea2Stx;
-  packet->payload[3] = Gea2Etx;
-  PacketShouldBeReceived(packet);
-  AfterTheInterfaceIsRun();
+  packet->payload[0] = tiny_gea3_esc;
+  packet->payload[1] = tiny_gea3_ack;
+  packet->payload[2] = tiny_gea3_stx;
+  packet->payload[3] = tiny_gea3_etx;
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldReceiveBroadcastPackets)
+TEST(tiny_gea2_interface_single_wire, should_receive_broadcast_packets)
 {
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
     0xFF, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0xEC, // crc
     0x5E,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0xFF;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
-  PacketShouldBeReceived(packet);
-  AfterTheInterfaceIsRun();
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldReceiveProductLineSpecificBroadcastPackets)
+TEST(tiny_gea2_interface_single_wire, should_receive_product_line_specific_broadcast_packets)
 {
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
     0xF3, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0xA3, // crc
     0x6C,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0xF3;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
-  PacketShouldBeReceived(packet);
-  AfterTheInterfaceIsRun();
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldDropPacketsAddressedToOtherNodes)
+TEST(tiny_gea2_interface_single_wire, should_drop_packets_addressed_to_other_nodes)
 {
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address + 1, // dst
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address + 1, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0xEF, // crc
     0xD1,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  NothingShouldHappen();
-  AfterTheInterfaceIsRun();
+  nothing_should_happen();
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldReceiveMultiplePackets)
+TEST(tiny_gea2_interface_single_wire, should_receive_multiple_packets)
 {
   {
-    AckShouldBeSent();
-    AfterBytesAreReceivedViaUart(
-      Gea2Stx,
-      Address, // dst
+    ack_should_be_sent();
+    after_bytes_are_received_via_uart(
+      tiny_gea3_stx,
+      address, // dst
       0x07, // len
       0x45, // src
       0x08, // crc
       0x8F,
-      Gea2Etx);
+      tiny_gea3_etx);
 
-    STATIC_ALLOC_GEA2PACKET(packet1, 0);
-    packet1->destination = Address;
+    tiny_gea3_STATIC_ALLOC_PACKET(packet1, 0);
+    packet1->destination = address;
     packet1->source = 0x45;
-    PacketShouldBeReceived(packet1);
-    AfterTheInterfaceIsRun();
+    packet_should_be_received(packet1);
+    after_the_interface_is_run();
   }
 
   {
-    AckShouldBeSent();
-    AfterBytesAreReceivedViaUart(
-      Gea2Stx,
-      Address, // dst
+    ack_should_be_sent();
+    after_bytes_are_received_via_uart(
+      tiny_gea3_stx,
+      address, // dst
       0x08, // len
       0x45, // src
       0xBF, // payload
       0x74, // crc
       0x0D,
-      Gea2Etx);
+      tiny_gea3_etx);
 
-    STATIC_ALLOC_GEA2PACKET(packet2, 1);
-    packet2->destination = Address;
+    tiny_gea3_STATIC_ALLOC_PACKET(packet2, 1);
+    packet2->destination = address;
     packet2->source = 0x45;
     packet2->payload[0] = 0xBF;
-    PacketShouldBeReceived(packet2);
-    AfterTheInterfaceIsRun();
+    packet_should_be_received(packet2);
+    after_the_interface_is_run();
   }
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldDropPacketsWithInvalidCrcs)
+TEST(tiny_gea2_interface_single_wire, should_drop_packets_with_invalid_crcs)
 {
-  GivenThatADiagnosticsEventSubscriptionIsActive();
-
-  ShouldRaiseDiagnosticsEvent(ReceivedPacketDroppedBecauseOfInvalidCrc);
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0xDE, // crc
     0xAD,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  NothingShouldHappen();
-  AfterTheInterfaceIsRun();
+  nothing_should_happen();
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldDropPacketsWithInvalidLength)
+TEST(tiny_gea2_interface_single_wire, should_drop_packets_with_invalid_length)
 {
-  GivenThatADiagnosticsEventSubscriptionIsActive();
-
-  ShouldRaiseDiagnosticsEvent(ReceivedPacketDroppedBecauseOfInvalidLength);
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x09, // len
     0x45, // src
     0xBF, // payload
     0xEA, // crc
     0x9C,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  NothingShouldHappen();
-  AfterTheInterfaceIsRun();
+  nothing_should_happen();
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldDropPacketsThatAreTooSmall)
+TEST(tiny_gea2_interface_single_wire, ShouldDropPacketsThatAreTooSmall)
 {
-  GivenThatADiagnosticsEventSubscriptionIsActive();
-
-  ShouldRaiseDiagnosticsEvent(ReceivedPacketDroppedBecauseOfInvalidLength);
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x06, // len
     0x3C, // crc
     0xD4,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  NothingShouldHappen();
-  AfterTheInterfaceIsRun();
+  nothing_should_happen();
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldDropPacketsReceivedBeforePublishingAPreviouslyReceivedPacket)
+TEST(tiny_gea2_interface_single_wire, should_drop_packets_received_before_publishing_a_previously_received_packet)
 {
-  AckShouldBeSent();
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  ack_should_be_sent();
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0x74, // crc
     0x0D,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
     0xFF, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0xEC, // crc
     0x5E,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
-  packet->destination = Address;
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
-  PacketShouldBeReceived(packet);
-  AfterTheInterfaceIsRun();
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldReceiveAPacketAfterAPreviousPacketIsAborted)
+TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_after_a_previous_packet_is_aborted)
 {
-  AckShouldBeSent();
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
+  ack_should_be_sent();
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
     0xAB,
     0xCD,
-    Gea2Stx,
-    Address, // dst
+    tiny_gea3_stx,
+    address, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0x74, // crc
     0x0D,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
-  packet->destination = Address;
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
-  PacketShouldBeReceived(packet);
-  AfterTheInterfaceIsRun();
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldDropBytesReceivedPriorToStx)
+TEST(tiny_gea2_interface_single_wire, should_drop_bytes_received_prior_to_stx)
 {
-  AckShouldBeSent();
-  AfterBytesAreReceivedViaUart(
+  ack_should_be_sent();
+  after_bytes_are_received_via_uart(
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, //
-    Gea2Stx,
-    Address, // dst
+    tiny_gea3_stx,
+    address, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0x74, // crc
     0x0D,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
-  packet->destination = Address;
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
-  PacketShouldBeReceived(packet);
-  AfterTheInterfaceIsRun();
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldNotPublishReceivedPacketsPriorToReceivingEtxReceivedBeforeTheInterbyteTimeout)
+TEST(tiny_gea2_interface_single_wire, should_not_publish_received_packets_prior_to_receiving_etx_received_before_the_interbyte_timeout)
 {
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0x74, // crc
     0x0D);
 
-  NothingShouldHappen();
-  AfterTheInterfaceIsRun();
+  nothing_should_happen();
+  after_the_interface_is_run();
 
-  After(Gea2InterbyteTimeoutMsec - 1);
-  AckShouldBeSent();
-  AfterBytesAreReceivedViaUart(Gea2Etx);
+  after(gea2_interbyte_timeout_msec - 1);
+  ack_should_be_sent();
+  after_bytes_are_received_via_uart(tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
-  packet->destination = Address;
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
-  PacketShouldBeReceived(packet);
-  AfterTheInterfaceIsRun();
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldRejectPacketsThatViolateTheInterbyteTimeout)
+TEST(tiny_gea2_interface_single_wire, should_reject_packets_that_violate_the_interbyte_timeout)
 {
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0x74, // crc
     0x0D);
 
-  NothingShouldHappen();
-  AfterTheInterfaceIsRun();
+  nothing_should_happen();
+  after_the_interface_is_run();
 
-  After(Gea2InterbyteTimeoutMsec);
+  after(gea2_interbyte_timeout_msec);
 
-  NothingShouldHappen();
-  AfterBytesAreReceivedViaUart(Gea2Etx);
+  nothing_should_happen();
+  after_bytes_are_received_via_uart(tiny_gea3_etx);
 
-  NothingShouldHappen();
-  AfterTheInterfaceIsRun();
+  nothing_should_happen();
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldRejectPacketsThatViolateTheInterbyteTimeoutAfterStx)
+TEST(tiny_gea2_interface_single_wire, should_reject_packets_that_violate_the_interbyte_timeout_after_stx)
 {
-  AfterBytesAreReceivedViaUart(Gea2Stx);
+  after_bytes_are_received_via_uart(tiny_gea3_stx);
 
-  NothingShouldHappen();
-  AfterTheInterfaceIsRun();
+  nothing_should_happen();
+  after_the_interface_is_run();
 
-  After(Gea2InterbyteTimeoutMsec);
+  after(gea2_interbyte_timeout_msec);
 
-  NothingShouldHappen();
-  AfterBytesAreReceivedViaUart(
-    Address, // dst
+  nothing_should_happen();
+  after_bytes_are_received_via_uart(
+    address, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0x74, // crc
     0x0D,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  NothingShouldHappen();
-  AfterTheInterfaceIsRun();
+  nothing_should_happen();
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldNotReceiveAPacketInIdleIfThePacketDoesNotStartWithStx)
+TEST(tiny_gea2_interface_single_wire, ShouldNotReceiveAPacketInIdleIfThePacketDoesNotStartWithStx)
 {
-  NothingShouldHappen();
-  AfterBytesAreReceivedViaUart(
+  nothing_should_happen();
+  after_bytes_are_received_via_uart(
     0x01, // Passes as Stx
-    Address, // dst
+    address, // dst
     0x07, // len
     0xBF, // src
     0x46, // crc
     0xDA,
-    Gea2Etx);
+    tiny_gea3_etx);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldNotReceiveAPacketInIdleCooldownIfThePacketDoesNotStartWithStx)
+TEST(tiny_gea2_interface_single_wire, ShouldNotReceiveAPacketInIdleCooldownIfThePacketDoesNotStartWithStx)
 {
-  GivenTheModuleIsInCooldownAfterReceivingAMessage();
+  given_the_module_is_in_cooldown_after_receiving_a_message();
 
-  NothingShouldHappen();
-  AfterBytesAreReceivedViaUart(
+  nothing_should_happen();
+  after_bytes_are_received_via_uart(
     0x01, // Passes as Stx
-    Address, // dst
+    address, // dst
     0x07, // len
     0xBF, // src
     0x46, // crc
     0xDA,
-    Gea2Etx);
+    tiny_gea3_etx);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldSendAPacketWithNoPayload)
+TEST(tiny_gea2_interface_single_wire, should_send_a_packet_with_no_payload)
 {
-  GivenTheUartTestDoubleIsEchoing();
-
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  given_uart_echoing_is_enabled();
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0x45, // dst
     0x07, // len
-    Address, // src
+    address, // src
     0x7D, // crc
     0x39,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
-  WhenPacketIsSent(packet);
+  when_packet_is_sent(packet);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldSendAPacketWithAPayload)
+TEST(tiny_gea2_interface_single_wire, should_send_a_packet_with_a_payload)
 {
-  GivenTheUartTestDoubleIsEchoing();
-
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0x45, // dst
     0x08, // len
-    Address, // src
+    address, // src
     0xD5, // payload
     0x21, // crc
     0xD3,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0x45;
   packet->payload[0] = 0xD5;
-  WhenPacketIsSent(packet);
+  when_packet_is_sent(packet);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldSendAPacketWithMaxPayloadGivenSendBufferSize)
+TEST(tiny_gea2_interface_single_wire, ShouldsendAPacketWithMaxPayloadGivensendBufferSize)
 {
-  GivenTheUartTestDoubleIsEchoing();
+  given_uart_echoing_is_enabled();
 
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0x45, // dst
     0x0E, // len
-    Address, // src
+    address, // src
     0x00, // payload
     0x01,
     0x02,
@@ -882,9 +841,9 @@ TEST(TinyGea2Interface_SingleWire, ShouldSendAPacketWithMaxPayloadGivenSendBuffe
     0x06,
     0x12, // crc
     0xD5,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 7);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 7);
   packet->destination = 0x45;
   packet->payload[0] = 0x00;
   packet->payload[1] = 0x01;
@@ -893,133 +852,131 @@ TEST(TinyGea2Interface_SingleWire, ShouldSendAPacketWithMaxPayloadGivenSendBuffe
   packet->payload[4] = 0x04;
   packet->payload[5] = 0x05;
   packet->payload[6] = 0x06;
-  WhenPacketIsSent(packet);
+  when_packet_is_sent(packet);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldRaiseAPacketSentEventWhenAPacketIsSent)
+TEST(tiny_gea2_interface_single_wire, ShouldRaiseAPacketSentEventWhenAPacketIsSent)
 {
-  GivenThatADiagnosticsEventSubscriptionIsActive();
-  GivenTheUartTestDoubleIsEchoing();
+  given_uart_echoing_is_enabled();
 
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0x45, // dst
     0x08, // len
-    Address, // src
+    address, // src
     0xD5, // payload
     0x21, // crc
     0xD3,
-    Gea2Etx);
-  ShouldRaiseDiagnosticsEvent(PacketSent);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0x45;
   packet->payload[0] = 0xD5;
-  WhenPacketIsSent(packet);
+  when_packet_is_sent(packet);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldNotSendAPacketThatIsTooLargeForTheSendBuffer)
+TEST(tiny_gea2_interface_single_wire, should_not_send_a_packet_that_is_too_large_for_the_send_buffer)
 {
-  STATIC_ALLOC_GEA2PACKET(packet, 8);
+  given_uart_echoing_is_enabled();
 
-  GivenThatADiagnosticsEventSubscriptionIsActive();
-  ShouldRaiseDiagnosticsEvent(SentPacketDroppedBecauseItWasLargerThanTheSendBuffer);
-  WhenPacketIsSent(packet);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 8);
+
+  when_packet_is_sent(packet);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldEscapeDataBytesWhenSending)
+TEST(tiny_gea2_interface_single_wire, should_escape_data_bytes_when_sending)
 {
-  GivenTheUartTestDoubleIsEchoing();
+  given_uart_echoing_is_enabled();
 
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0x45, // dst
     0x08, // len
-    Address, // src
+    address, // src
     0xE0, // escape
     0xE1, // payload
     0x57, // crc
     0x04,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0x45;
   packet->payload[0] = 0xE1;
-  WhenPacketIsSent(packet);
+  when_packet_is_sent(packet);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldEscapeCrcLsbWhenSending)
+TEST(tiny_gea2_interface_single_wire, should_escape_crc_lsb_when_sending)
 {
-  GivenTheUartTestDoubleIsEchoing();
+  given_uart_echoing_is_enabled();
 
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0x45, // dst
     0x08, // len
-    Address, // src
+    address, // src
     0xA0, // payload
     0x0F, // crc
     0xE0,
     0xE1,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0x45;
   packet->payload[0] = 0xA0;
-  WhenPacketIsSent(packet);
+  when_packet_is_sent(packet);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldEscapeCrcMsbWhenSending)
+TEST(tiny_gea2_interface_single_wire, should_escape_crc_msb_when_sending)
 {
-  GivenTheUartTestDoubleIsEchoing();
+  given_uart_echoing_is_enabled();
 
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0x45, // dst
     0x08, // len
-    Address, // src
+    address, // src
     0xC8, // payload
     0xE0, // crc
     0xE2,
     0x4F,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0x45;
   packet->payload[0] = 0xC8;
-  WhenPacketIsSent(packet);
+  when_packet_is_sent(packet);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldAllowPacketsToBeForwarded)
+TEST(tiny_gea2_interface_single_wire, should_allow_packets_to_be_forwarded)
 {
-  GivenTheUartTestDoubleIsEchoing();
+  given_uart_echoing_is_enabled();
 
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0x45, // dst
     0x08, // len
     0x32, // src
     0xD5, // payload
     0x29, // crc
     0x06,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
   packet->source = 0x32;
   packet->destination = 0x45;
   packet->payload[0] = 0xD5;
-  WhenPacketIsForwarded(packet);
+  when_packet_is_forwarded(packet);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldForwardAPacketWithMaxPayloadGivenSendBufferSize)
+TEST(tiny_gea2_interface_single_wire, should_forward_a_packet_with_max_payload_given_send_buffer_size)
 {
-  GivenTheUartTestDoubleIsEchoing();
+  given_uart_echoing_is_enabled();
 
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0x45, // dst
     0x0E, // len
-    Address, // src
+    address, // src
     0x00, // payload
     0x01,
     0x02,
@@ -1029,10 +986,10 @@ TEST(TinyGea2Interface_SingleWire, ShouldForwardAPacketWithMaxPayloadGivenSendBu
     0x06,
     0x12, // crc
     0xD5,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 7);
-  packet->source = Address;
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 7);
+  packet->source = address;
   packet->destination = 0x45;
   packet->payload[0] = 0x00;
   packet->payload[1] = 0x01;
@@ -1041,451 +998,416 @@ TEST(TinyGea2Interface_SingleWire, ShouldForwardAPacketWithMaxPayloadGivenSendBu
   packet->payload[4] = 0x04;
   packet->payload[5] = 0x05;
   packet->payload[6] = 0x06;
-  WhenPacketIsForwarded(packet);
+  when_packet_is_forwarded(packet);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldNotForwardPacketsThatAreTooLargeToBeBuffered)
+TEST(tiny_gea2_interface_single_wire, should_not_forward_packets_that_are_too_large_to_be_buffered)
 {
-  STATIC_ALLOC_GEA2PACKET(packet, 8);
+  given_uart_echoing_is_enabled();
 
-  GivenThatADiagnosticsEventSubscriptionIsActive();
-  ShouldRaiseDiagnosticsEvent(SentPacketDroppedBecauseItWasLargerThanTheSendBuffer);
-  WhenPacketIsForwarded(packet);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 8);
+
+  when_packet_is_forwarded(packet);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldNotBeSendingAfterInitialization)
+TEST(tiny_gea2_interface_single_wire, should_be_able_to_send_back_broadcasts_without_an_ack)
 {
-  ShouldNotBeSending();
+  given_uart_echoing_is_enabled();
+
+  given_that_a_broadcast_packet_has_been_sent();
+  should_be_able_to_send_a_message_after_idle_cooldown();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldIndicateWhenSending)
+TEST(tiny_gea2_interface_single_wire, should_wait_until_the_idle_cool_down_time_has_expired_before_sending_a_packet)
 {
-  GivenThatASendIsInProgress();
-  ShouldBeSending();
-}
+  given_uart_echoing_is_enabled();
 
-TEST(TinyGea2Interface_SingleWire, ShouldNotBeSendingAfterSendIsCompleteForABroadcastMessage)
-{
-  GivenThatABroadcastPacketHasBeenSent();
-  ShouldNotBeSending();
-}
+  given_the_module_is_in_cooldown_after_receiving_a_message();
 
-TEST(TinyGea2Interface_SingleWire, ShouldBeAbleToSendBackToBackBroadcastsWithoutAnAck)
-{
-  GivenThatABroadcastPacketHasBeenSent();
-  ShouldBeAbleToSendAMessageAfterIdleCooldown();
-}
-
-TEST(TinyGea2Interface_SingleWire, ShouldNotBeSendingAfterSendIsCompleteAndAnAckHasBeenReceived)
-{
-  GivenThatAPacketHasBeenSent();
-
-  AfterBytesAreReceivedViaUart(Gea2Ack);
-  ShouldNotBeSending();
-}
-
-TEST(TinyGea2Interface_SingleWire, ShouldWaitUntilTheIdleCoolDownTimeHasExpiredBeforeSendingAPacket)
-{
-  GivenTheUartTestDoubleIsEchoing();
-  GivenTheModuleIsInCooldownAfterReceivingAMessage();
-  ShouldNotBeSending();
-
-  NothingShouldHappen();
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
+  nothing_should_happen();
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
-  WhenPacketIsSent(packet);
-  ShouldBeSending();
+  when_packet_is_sent(packet);
 
-  ShouldBeAbleToSendAMessageAfterIdleCooldown();
+  should_be_able_to_send_a_message_after_idle_cooldown();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldRetrySendingWhenTheReflectionTimeoutViolationOccursAndStopAfterRetriesAreExhausted)
+TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_the_reflection_timeout_violation_occurs_and_stop_after_retries_are_exhausted)
 {
-  ShouldSendBytesViaUart(Gea2Stx);
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
+  given_uart_echoing_is_enabled();
+
+  should_send_bytes_via_uart(tiny_gea3_stx);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
-  WhenPacketIsSent(packet);
-  ShouldBeSending();
+  when_packet_is_sent(packet);
 
-  NothingShouldHappen();
-  After(GEA2_REFLECTION_TIMEOUT_MSEC - 1);
+  nothing_should_happen();
+  after(gea2_reflection_timeout_msec - 1);
 
-  NothingShouldHappen();
-  After(1);
-  ShouldBeSending();
+  nothing_should_happen();
+  after(1);
 
-  NothingShouldHappen();
-  After(IdleCooldownMsec - 1);
+  nothing_should_happen();
+  after(idle_cooldown_msec - 1);
 
-  ShouldSendBytesViaUart(Gea2Stx);
-  After(1);
-  ShouldBeSending();
+  should_send_bytes_via_uart(tiny_gea3_stx);
+  after(1);
 
-  NothingShouldHappen();
-  After(GEA2_REFLECTION_TIMEOUT_MSEC + IdleCooldownMsec - 1);
+  nothing_should_happen();
+  after(gea2_reflection_timeout_msec + idle_cooldown_msec - 1);
 
-  ShouldSendBytesViaUart(Gea2Stx);
-  After(1);
-  ShouldBeSending();
+  should_send_bytes_via_uart(tiny_gea3_stx);
+  after(1);
 
-  NothingShouldHappen();
-  After(GEA2_REFLECTION_TIMEOUT_MSEC - 1);
-  ShouldBeSending();
+  nothing_should_happen();
+  after(gea2_reflection_timeout_msec - 1);
 
-  After(1);
-  ShouldNotBeSending();
+  after(1);
 
-  ShouldBeAbleToSendAMessageAfterIdleCooldown();
+  should_be_able_to_send_a_message_after_idle_cooldown();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldRaiseAReflectionTimedOutDiagnosticsEventWhenAReflectionTimeoutRetrySendingWhenTheReflectionTimeoutViolationOccursAndStopAfterRetriesAreExhausted)
+TEST(tiny_gea2_interface_single_wire, should_raise_reflection_timed_out_diagnostics_event_when_a_reflection_timeout_retry_sending_when_the_reflection_timeout_violation_occurs_and_stop_after_retrries_are_exhausted)
 {
-  GivenThatADiagnosticsEventSubscriptionIsActive();
+  given_uart_echoing_is_enabled();
 
-  ShouldSendBytesViaUart(Gea2Stx);
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
+  should_send_bytes_via_uart(tiny_gea3_stx);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
-  WhenPacketIsSent(packet);
+  when_packet_is_sent(packet);
 
-  ShouldRaiseDiagnosticsEvent(SingleWireReflectionTimedOut);
-  After(GEA2_REFLECTION_TIMEOUT_MSEC);
+  after(gea2_reflection_timeout_msec);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldRetrySendingWhenACollisionOccursAndStopAfterRetriesAreExhausted)
+TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_a_collision_occurs_and_stop_after_retries_are_exhausted)
 {
-  ShouldSendBytesViaUart(Gea2Stx);
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
+  given_uart_echoing_is_enabled();
+
+  should_send_bytes_via_uart(tiny_gea3_stx);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
-  WhenPacketIsSent(packet);
-  ShouldBeSending();
+  when_packet_is_sent(packet);
 
-  AfterBytesAreReceivedViaUart(Gea2Stx - 1);
-  ShouldBeSending();
+  after_bytes_are_received_via_uart(tiny_gea3_stx - 1);
 
-  NothingShouldHappen();
-  After(CollisionTimeoutMsec() - 1);
+  nothing_should_happen();
+  after(collision_timeout_msec() - 1);
 
-  ShouldSendBytesViaUart(Gea2Stx);
-  After(1);
-  ShouldBeSending();
+  should_send_bytes_via_uart(tiny_gea3_stx);
+  after(1);
 
-  AfterBytesAreReceivedViaUart(Gea2Stx - 1);
-  ShouldBeSending();
+  after_bytes_are_received_via_uart(tiny_gea3_stx - 1);
 
-  NothingShouldHappen();
-  After(CollisionTimeoutMsec() - 1);
+  nothing_should_happen();
+  after(collision_timeout_msec() - 1);
 
-  ShouldSendBytesViaUart(Gea2Stx);
-  After(1);
-  ShouldBeSending();
+  should_send_bytes_via_uart(tiny_gea3_stx);
+  after(1);
 
-  AfterBytesAreReceivedViaUart(Gea2Stx - 1);
-  ShouldNotBeSending();
+  after_bytes_are_received_via_uart(tiny_gea3_stx - 1);
 
-  ShouldBeAbleToSendAMessageAfterCoolisionCooldown();
+  should_be_able_to_send_a_message_after_collision_cooldown();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldRetrySendingWhenACollisionOccursAndStopAfterRetriesAreExhaustedWithACustomRetryCount)
+TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_a_collision_occurs_and_stop_after_retries_are_exhausted_with_a_custom_retry_count)
 {
-  GivenThatRetriesHaveBeenSetTo(1);
+  given_uart_echoing_is_enabled();
 
-  ShouldSendBytesViaUart(Gea2Stx);
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
+  given_that_retries_have_been_set_to(1);
+
+  should_send_bytes_via_uart(tiny_gea3_stx);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
-  WhenPacketIsSent(packet);
-  ShouldBeSending();
+  when_packet_is_sent(packet);
 
-  AfterBytesAreReceivedViaUart(Gea2Stx - 1);
-  ShouldBeSending();
+  after_bytes_are_received_via_uart(tiny_gea3_stx - 1);
 
-  NothingShouldHappen();
-  After(CollisionTimeoutMsec() - 1);
+  nothing_should_happen();
+  after(collision_timeout_msec() - 1);
 
-  ShouldSendBytesViaUart(Gea2Stx);
-  After(1);
-  ShouldBeSending();
+  should_send_bytes_via_uart(tiny_gea3_stx);
+  after(1);
 
-  AfterBytesAreReceivedViaUart(Gea2Stx - 1);
-  ShouldNotBeSending();
+  after_bytes_are_received_via_uart(tiny_gea3_stx - 1);
 
-  ShouldBeAbleToSendAMessageAfterCoolisionCooldown();
+  should_be_able_to_send_a_message_after_collision_cooldown();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldRaiseACollisionDetectedDiagnosticsEventWhenACollisionOccurs)
+TEST(tiny_gea2_interface_single_wire, should_raise_a_collision_detected_diagnostics_event_when_a_collision_occurs)
 {
-  GivenThatADiagnosticsEventSubscriptionIsActive();
+  given_uart_echoing_is_enabled();
 
-  ShouldSendBytesViaUart(Gea2Stx);
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
+  should_send_bytes_via_uart(tiny_gea3_stx);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
-  WhenPacketIsSent(packet);
-  ShouldBeSending();
+  when_packet_is_sent(packet);
 
-  ShouldRaiseDiagnosticsEvent(SingleWireCollisionDetected);
-  AfterBytesAreReceivedViaUart(Gea2Stx - 1);
+  after_bytes_are_received_via_uart(tiny_gea3_stx - 1);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldStopSendingWhenAnUnexpectedByteIsReceivedWhileWaitingForAnAck)
+TEST(tiny_gea2_interface_single_wire, should_stop_sending_when_an_unexpected_byte_is_received_while_waiting_for_an_ack)
 {
-  GivenThatAPacketHasBeenSent();
+  gjven_that_a_packet_has_been_sent();
 
-  AfterBytesAreReceivedViaUart(Gea2Ack - 1);
-  ShouldBeSending();
+  after_bytes_are_received_via_uart(tiny_gea3_ack - 1);
 
-  NothingShouldHappen();
-  After(CollisionTimeoutMsec() - 1);
+  nothing_should_happen();
+  after(collision_timeout_msec() - 1);
 
-  ThePacketShouldBeResent();
-  After(1);
+  the_packet_should_be_resent();
+  after(1);
 
-  AfterBytesAreReceivedViaUart(Gea2Ack - 1);
-  ShouldBeSending();
+  after_bytes_are_received_via_uart(tiny_gea3_ack - 1);
 
-  NothingShouldHappen();
-  After(CollisionTimeoutMsec() - 1);
+  nothing_should_happen();
+  after(collision_timeout_msec() - 1);
 
-  ThePacketShouldBeResent();
-  After(1);
+  the_packet_should_be_resent();
+  after(1);
 
-  AfterBytesAreReceivedViaUart(Gea2Ack - 1);
-  ShouldNotBeSending();
+  after_bytes_are_received_via_uart(tiny_gea3_ack - 1);
 
-  ShouldBeAbleToSendAMessageAfterCoolisionCooldown();
+  should_be_able_to_send_a_message_after_collision_cooldown();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldIgnoreSendRequestsWhenAlreadySending)
+TEST(tiny_gea2_interface_single_wire, should_ignore_send_requests_when_already_sending)
 {
-  GivenThatADiagnosticsEventSubscriptionIsActive();
+  given_uart_echoing_is_enabled();
 
-  ShouldSendBytesViaUart(Gea2Stx);
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
+  should_send_bytes_via_uart(tiny_gea3_stx);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
-  WhenPacketIsSent(packet);
+  when_packet_is_sent(packet);
 
-  ShouldRaiseDiagnosticsEvent(SentPacketDroppedBecauseASendWasInProgress);
-  STATIC_ALLOC_GEA2PACKET(differentPacket, 0);
+  tiny_gea3_STATIC_ALLOC_PACKET(differentPacket, 0);
   packet->destination = 0x80;
-  WhenPacketIsSent(differentPacket);
+  when_packet_is_sent(differentPacket);
 
-  ShouldSendBytesViaUart(0x45);
-  AfterBytesAreReceivedViaUart(Gea2Stx);
+  should_send_bytes_via_uart(0x45);
+  after_bytes_are_received_via_uart(tiny_gea3_stx);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldRetryAMessageIfNoAckIsReceived)
+TEST(tiny_gea2_interface_single_wire, should_retry_a_message_if_no_ack_is_received)
 {
-  GivenTheUartTestDoubleIsEchoing();
+  given_uart_echoing_is_enabled();
 
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0x45, // dst
     0x07, // len
-    Address, // src
+    address, // src
     0x7D, // crc
     0x39,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
-  WhenPacketIsSent(packet);
+  when_packet_is_sent(packet);
 
-  NothingShouldHappen();
-  After(Gea2AckTimeoutMsec);
-  After(CollisionTimeoutMsec() - 1);
+  nothing_should_happen();
+  after(tiny_gea3_ack_timeout_msec);
+  after(collision_timeout_msec() - 1);
 
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0x45, // dst
     0x07, // len
-    Address, // src
+    address, // src
     0x7D, // crc
     0x39,
-    Gea2Etx);
-  After(1);
+    tiny_gea3_etx);
+  after(1);
 
-  NothingShouldHappen();
-  After(Gea2AckTimeoutMsec);
-  After(CollisionTimeoutMsec() - 1);
+  nothing_should_happen();
+  after(tiny_gea3_ack_timeout_msec);
+  after(collision_timeout_msec() - 1);
 
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0x45, // dst
     0x07, // len
-    Address, // src
+    address, // src
     0x7D, // crc
     0x39,
-    Gea2Etx);
-  After(1);
+    tiny_gea3_etx);
+  after(1);
 
-  NothingShouldHappen();
-  After(Gea2AckTimeoutMsec - 1);
-  ShouldBeSending();
+  nothing_should_happen();
+  after(tiny_gea3_ack_timeout_msec - 1);
 
-  After(1);
-  ShouldNotBeSending();
+  after(1);
 
-  ShouldBeAbleToSendAMessageAfterCoolisionCooldown();
+  should_be_able_to_send_a_message_after_collision_cooldown();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldSuccessfullyReceiveAPacketWhileInCollisionCooldown)
+TEST(tiny_gea2_interface_single_wire, should_successfully_receive_a_packet_while_in_collision_cooldown)
 {
-  GivenTheModuleIsInCollisionCooldown();
+  given_uart_echoing_is_enabled();
 
-  AckShouldBeSent();
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  given_the_module_is_in_collision_cooldown();
+
+  ack_should_be_sent();
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x07, // len
     0x45, // src
     0x08, // crc
     0x8F,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
-  packet->destination = Address;
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  packet->destination = address;
   packet->source = 0x45;
-  PacketShouldBeReceived(packet);
-  AfterTheInterfaceIsRun();
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldNotReceiveAPacketWhileInCollisionCooldownThatDoesNotStartWithStx)
+TEST(tiny_gea2_interface_single_wire, should_not_receive_a_packet_while_in_collision_cooldown_that_does_not_start_with_stx)
 {
-  GivenTheModuleIsInCollisionCooldown();
+  given_uart_echoing_is_enabled();
 
-  AfterBytesAreReceivedViaUart(
-    Address, // dst
+  given_the_module_is_in_collision_cooldown();
+
+  after_bytes_are_received_via_uart(
+    address, // dst
     0x07, // len
     0x45, // src
     0x08, // crc
     0x8F,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  NothingShouldHappen();
-  AfterTheInterfaceIsRun();
+  nothing_should_happen();
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldRestartIdleTimeoutWhenByteTrafficOccurs)
+TEST(tiny_gea2_interface_single_wire, should_restart_idle_timeout_when_byte_traffic_occurs)
 {
-  GivenTheModuleIsInIdleCooldown();
+  given_uart_echoing_is_enabled();
 
-  NothingShouldHappen();
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
+  given_the_module_is_in_idle_cooldown();
+
+  nothing_should_happen();
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
-  WhenPacketIsSent(packet);
+  when_packet_is_sent(packet);
 
-  NothingShouldHappen();
-  After(IdleCooldownMsec - 1);
-  AfterBytesAreReceivedViaUart(Gea2Stx + 1);
+  nothing_should_happen();
+  after(idle_cooldown_msec - 1);
+  after_bytes_are_received_via_uart(tiny_gea3_stx + 1);
 
-  NothingShouldHappen();
-  After(1);
+  nothing_should_happen();
+  after(1);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldNotStartReceivingAPacketWhileAReceivedPacketIsReady)
+TEST(tiny_gea2_interface_single_wire, ShouldNotStartReceivingAPacketWhileAReceivedPacketIsReady)
 {
-  GivenThatADiagnosticsEventSubscriptionIsActive();
+  given_uart_echoing_is_enabled();
 
-  ShouldRaiseDiagnosticsEvent(PacketReceived);
-  AckShouldBeSent();
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  ack_should_be_sent();
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x07, // len
     0x45, // src
     0x08, // crc
     0x8F,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  After(IdleCooldownMsec);
+  after(idle_cooldown_msec);
 
-  ShouldRaiseDiagnosticsEvent(ReceivedByteDroppedBecauseAPacketWasPendingPublication);
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address, // dst
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address, // dst
     0x07, // len
     0x05, // src
     0x40, // crc
     0x4B,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
-  packet->destination = Address;
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  packet->destination = address;
   packet->source = 0x45;
-  PacketShouldBeReceived(packet);
-  AfterTheInterfaceIsRun();
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldHandleFailureToSendDuringAnEscape)
+TEST(tiny_gea2_interface_single_wire, should_handle_a_failure_to_send_during_an_escape)
 {
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  given_uart_echoing_is_enabled();
+
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0xE0);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0xE1;
-  WhenPacketIsSent(packet);
+  when_packet_is_sent(packet);
 
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
     0x00);
 
-  After(CollisionTimeoutMsec() - 1);
+  after(collision_timeout_msec() - 1);
 
-  GivenTheUartTestDoubleIsEchoing();
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0xE0, // escape
     0xE1, // dst
     0x07, // len
-    Address, // src
+    address, // src
     0x1C, // crc
     0x65,
-    Gea2Etx);
-  After(1);
+    tiny_gea3_etx);
+  after(1);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldEnterIdleCooldownWhenANonStxByteIsReceivedInIdle)
+TEST(tiny_gea2_interface_single_wire, should_enter_idle_cooldown_when_a_non_stx_byte_is_received_in_idle)
 {
-  AfterBytesAreReceivedViaUart(Gea2Stx - 1);
+  given_uart_echoing_is_enabled();
 
-  NothingShouldHappen();
-  STATIC_ALLOC_GEA2PACKET(packet, 0);
+  after_bytes_are_received_via_uart(tiny_gea3_stx - 1);
+
+  nothing_should_happen();
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
-  WhenPacketIsSent(packet);
+  when_packet_is_sent(packet);
 
-  NothingShouldHappen();
-  After(IdleCooldownMsec - 1);
+  nothing_should_happen();
+  after(idle_cooldown_msec - 1);
 
-  GivenTheUartTestDoubleIsEchoing();
-  ShouldSendBytesViaUart(
-    Gea2Stx,
+  should_send_bytes_via_uart(
+    tiny_gea3_stx,
     0x45, // dst
     0x07, // len
-    Address, // src
+    address, // src
     0x7D, // crc
     0x39,
-    Gea2Etx);
-  After(1);
+    tiny_gea3_etx);
+  after(1);
 }
 
-TEST(TinyGea2Interface_SingleWire, ShouldReceivePacketsAddressedToOtherNodesWhenIgnoreDestinationAddressIsEnabled)
+TEST(tiny_gea2_interface_single_wire, should_receive_packets_addressed_to_other_nodes_when_ignore_destination_address_is_enabled)
 {
-  GivenThatIgnoreDestinationAddressIsEnabled();
+  given_uart_echoing_is_enabled();
 
-  AckShouldBeSent();
-  AfterBytesAreReceivedViaUart(
-    Gea2Stx,
-    Address + 1, // dst
+  given_that_ignore_destination_address_is_enabled();
+
+  ack_should_be_sent();
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address + 1, // dst
     0x08, // len
     0x45, // src
     0xBF, // payload
     0xEF, // crc
     0xD1,
-    Gea2Etx);
+    tiny_gea3_etx);
 
-  STATIC_ALLOC_GEA2PACKET(packet, 1);
-  packet->destination = Address + 1;
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  packet->destination = address + 1;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
-  PacketShouldBeReceived(packet);
-  AfterTheInterfaceIsRun();
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }

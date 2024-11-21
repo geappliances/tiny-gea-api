@@ -6,13 +6,23 @@
 #include <stdbool.h>
 #include "tiny_crc16.h"
 #include "tiny_fsm.h"
+#include "tiny_gea2_single_wire_interface.h"
 #include "tiny_gea3_constants.h"
 #include "tiny_gea3_interface.h"
+#include "tiny_gea3_packet.h"
 #include "tiny_utils.h"
+
+enum {
+  gea2_reflection_timeout_msec = 6,
+  tiny_gea3_ack_timeout_msec = 6,
+  gea2_broadcast_mask = 0xFF, // IDK WHAT THIS IS BUT FIX IT
+  default_retries = 2,
+  gea2_interbyte_timeout_msec = 6,
+};
 
 typedef tiny_gea2_interface_single_wire_t self_t;
 
-// Send packet should match tiny_gea3_packet_t, but stores data_length (per spec) instead of payload_length
+// send packet should match tiny_gea3_packet_t, but stores data_length (per spec) instead of payload_length
 // (used application convenience)
 typedef struct {
   uint8_t destination;
@@ -23,7 +33,7 @@ typedef struct {
 
 enum {
   signal_byte_received = tiny_fsm_signal_user_start,
-  signal_inter_byte_timeout,
+  signal_interbyte_timeout,
   signal_send_ready,
   signal_idle_cooldown_timeout,
   signal_reflection_timeout,
@@ -43,27 +53,38 @@ enum {
   send_state_data,
   send_state_crc_msb,
   send_state_crc_lsb,
-  send_state_etx
+  send_state_etx,
+  send_state_stx,
+  send_state_done,
 };
 
-static instance_t* interface_from_fsm(tiny_fsm_t* fsm)
+static void state_idle(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const void* data);
+static void state_receive(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const void* data);
+static void state_idle_cooldown(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const void* data);
+static void state_send(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const void* data);
+static void state_wait_for_ack(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const void* data);
+static void state_collision_cooldown(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const void* data);
+
+static self_t* interface_from_fsm(tiny_fsm_t* fsm)
 {
-  return container_of(instance_t, _private.fsm, fsm);
+  return container_of(self_t, _private.fsm, fsm);
+}
+
+static void byte_received(void* context, const void* _args)
+{
+  reinterpret(instance, context, self_t*);
+  reinterpret(args, _args, const tiny_uart_on_receive_args_t*);
+
+  tiny_fsm_send_signal(&instance->_private.fsm, signal_byte_received, &args->byte);
 }
 
 #define needs_escape(_byte) ((_byte & 0xFC) == tiny_gea3_esc)
 
-#define is_broadcast_address(_address) ((GEA2_BCAST_MASK & _address) == GEA2_BCAST_MASK)
-
-static void publish_diagnostics_event(Instance_t* instance, tiny_gea2 type)
-{
-  TinyGea2InterfaceOnDiagnosticsEventArgs_t args = { .type = type };
-  tiny_event_publish(&instance->_private.onDiagnosticsEvent, &args);
-}
+#define is_broadcast_address(_address) ((gea2_broadcast_mask & _address) == gea2_broadcast_mask)
 
 static void state_idle(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const void* data)
 {
-  instance_t* instance = interface_from_fsm(fsm);
+  self_t* instance = interface_from_fsm(fsm);
   switch(signal) {
     case tiny_fsm_signal_entry:
     case signal_send_ready:
@@ -76,86 +97,92 @@ static void state_idle(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const vo
       reinterpret(byte, data, const uint8_t*);
 
       if(instance->_private.receive.packetReady) {
-        publish_diagnostics_event(instance, TinyGea2InterfaceDiagnosticsEventType_ReceivedByteDroppedBecauseAPacketWasPendingPublication);
+        break;
       }
 
-      if(*byte == Gea2Stx && !instance->_private.receive.packetReady) {
-        tiny_fsm_transition(fsm, State_Receive);
+      if(*byte == tiny_gea3_stx && !instance->_private.receive.packetReady) {
+        tiny_fsm_transition(fsm, state_receive);
       }
       else {
-        tiny_fsm_transition(fsm, State_IdleCooldown);
+        tiny_fsm_transition(fsm, state_idle_cooldown);
       }
     } break;
   }
 }
 
-static bool determine_byte_to_send_considering_escapes(Instance_t* instance, uint8_t byte, uint8_t* byteToSend)
+static void reflection_timeout(void* context)
+{
+  self_t* instance = context;
+  tiny_fsm_send_signal(&instance->_private.fsm, signal_reflection_timeout, NULL);
+}
+
+static bool determine_byte_to_send_considering_escapes(self_t* instance, uint8_t byte, uint8_t* byteTosend)
 {
   if(!instance->_private.send.escaped && needs_escape(byte)) {
     instance->_private.send.escaped = true;
-    *byteToSend = Gea2Esc;
+    *byteTosend = tiny_gea3_esc;
   }
   else {
     instance->_private.send.escaped = false;
-    *byteToSend = byte;
+    *byteTosend = byte;
   }
 
   return !instance->_private.send.escaped;
 }
 
-static void send_next_byte(Instance_t* instance)
+static void send_next_byte(self_t* instance)
 {
-  uint8_t byteToSend = 0;
+  uint8_t byteTosend = 0;
 
-  tiny_timer_module_start(
-    &instance->_private.timerModule,
+  tiny_timer_start(
+    &instance->_private.timerGroup,
     &instance->_private.timer,
-    GEA2_REFLECTION_TIMEOUT_MSEC,
-    reflection_timeout,
-    instance);
+    gea2_reflection_timeout_msec,
+    instance,
+    reflection_timeout);
 
   switch(instance->_private.send.state) {
     case send_state_stx:
-      byteToSend = Gea2Stx;
+      byteTosend = tiny_gea3_stx;
       instance->_private.send.state = send_state_data;
       break;
 
     case send_state_data:
-      if(DetermineByteToSendConsideringEscapes(instance, instance->_private.send.buffer[instance->_private.send.offset], &byteToSend)) {
+      if(determine_byte_to_send_considering_escapes(instance, instance->_private.send.buffer[instance->_private.send.offset], &byteTosend)) {
         reinterpret(sendPacket, instance->_private.send.buffer, const send_packet_t*);
         instance->_private.send.offset++;
 
-        if(instance->_private.send.offset >= sendPacket->dataLength - DataLengthBytesNotIncludedInData) {
+        if(instance->_private.send.offset >= sendPacket->data_length - data_length_bytes_not_included_in_data) {
           instance->_private.send.state = send_state_crc_msb;
         }
       }
       break;
 
     case send_state_crc_msb:
-      byteToSend = instance->_private.send.crc >> 8;
-      if(DetermineByteToSendConsideringEscapes(instance, byteToSend, &byteToSend)) {
+      byteTosend = instance->_private.send.crc >> 8;
+      if(determine_byte_to_send_considering_escapes(instance, byteTosend, &byteTosend)) {
         instance->_private.send.state = send_state_crc_lsb;
       }
       break;
 
     case send_state_crc_lsb:
-      byteToSend = instance->_private.send.crc;
-      if(DetermineByteToSendConsideringEscapes(instance, byteToSend, &byteToSend)) {
+      byteTosend = instance->_private.send.crc;
+      if(determine_byte_to_send_considering_escapes(instance, byteTosend, &byteTosend)) {
         instance->_private.send.state = send_state_etx;
       }
       break;
 
     case send_state_etx:
-      byteToSend = Gea2Etx;
+      byteTosend = tiny_gea3_etx;
       instance->_private.send.state = send_state_done;
       break;
   }
 
-  instance->_private.send.expectedReflection = byteToSend;
-  TinyUart_Send(instance->_private.uart, byteToSend);
+  instance->_private.send.expectedReflection = byteTosend;
+  tiny_uart_send(instance->_private.uart, byteTosend);
 }
 
-static void handle_send_failure(Instance_t* instance)
+static void handle_send_failure(self_t* instance)
 {
   if(instance->_private.send.retries > 0) {
     instance->_private.send.retries--;
@@ -164,20 +191,12 @@ static void handle_send_failure(Instance_t* instance)
     instance->_private.send.active = false;
   }
 
-  tiny_fsm_transition(&instance->_private.fsm, State_CollisionCooldown);
+  tiny_fsm_transition(&instance->_private.fsm, state_collision_cooldown);
 }
 
-static void reflection_timeout(void* context, TinyTimerModule_t* timerModule)
+static void state_send(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const void* data)
 {
-  (void)timerModule;
-
-  Instance_t* instance = context;
-  tiny_fsm_send_signal(&instance->_private.fsm, Signal_reflection_timeout, NULL);
-}
-
-static void state_send(TinyFsm_t* fsm, const TinyFsmSignal_t signal, const void* data)
-{
-  Instance_t* instance = interface_from_fsm(fsm);
+  self_t* instance = interface_from_fsm(fsm);
 
   switch(signal) {
     case tiny_fsm_signal_entry:
@@ -192,16 +211,14 @@ static void state_send(TinyFsm_t* fsm, const TinyFsmSignal_t signal, const void*
       reinterpret(byte, data, const uint8_t*);
       if(*byte == instance->_private.send.expectedReflection) {
         if(instance->_private.send.state == send_state_done) {
-          PublishDiagnosticsEvent(instance, TinyGea2InterfaceDiagnosticsEventType_PacketSent);
-
           send_packet_t* sendPacket = (send_packet_t*)instance->_private.send.buffer;
 
           if(is_broadcast_address(sendPacket->destination)) {
             instance->_private.send.active = false;
-            tiny_fsm_transition(fsm, State_IdleCooldown);
+            tiny_fsm_transition(fsm, state_idle_cooldown);
           }
           else {
-            tiny_fsm_transition(fsm, State_WaitForAck);
+            tiny_fsm_transition(fsm, state_wait_for_ack);
           }
         }
         else {
@@ -209,335 +226,407 @@ static void state_send(TinyFsm_t* fsm, const TinyFsmSignal_t signal, const void*
         }
       }
       else {
-        PublishDiagnosticsEvent(instance, TinyGea2InterfaceDiagnosticsEventType_SingleWireCollisionDetected);
-        HandleSendFailure(instance);
+        handle_send_failure(instance);
       }
     } break;
 
-    case Signal_reflection_timeout:
-      PublishDiagnosticsEvent(instance, TinyGea2InterfaceDiagnosticsEventType_SingleWireReflectionTimedOut);
-      HandleSendFailure(instance);
-      tiny_fsm_transition(fsm, State_IdleCooldown);
+    case signal_reflection_timeout:
+      handle_send_failure(instance);
+      tiny_fsm_transition(fsm, state_idle_cooldown);
       break;
   }
 }
 
-static void handle_success(Instance_t* instance)
+static void handle_success(self_t* instance)
 {
   instance->_private.send.active = false;
-  tiny_fsm_transition(&instance->_private.fsm, State_IdleCooldown);
+  tiny_fsm_transition(&instance->_private.fsm, state_idle_cooldown);
 }
 
-static void ack_timeout(void* context, TinyTimerModule_t* timerModule)
+static void ack_timeout(void* context)
 {
-  (void)timerModule;
-
-  Instance_t* instance = context;
-  tiny_fsm_send_signal(&instance->_private.fsm, Signal_AckTimeout, NULL);
+  self_t* instance = context;
+  tiny_fsm_send_signal(&instance->_private.fsm, signal_ack_timeout, NULL);
 }
 
-static void start_ack_timeout_timer(Instance_t* instance)
+static void start_ack_timeout_timer(self_t* instance)
 {
-  tiny_timer_module_start(
-    &instance->_private.timerModule,
+  tiny_timer_start(
+    &instance->_private.timerGroup,
     &instance->_private.timer,
-    Gea2AckTimeoutMsec,
-    AckTimeout,
-    instance);
+    tiny_gea3_ack_timeout_msec,
+    instance,
+    ack_timeout);
 }
-static void state_wait_for_ack(TinyFsm_t* fsm, const TinyFsmSignal_t signal, const void* data)
+
+static void state_wait_for_ack(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const void* data)
 {
-  Instance_t* instance = interface_from_fsm(fsm);
+  self_t* instance = interface_from_fsm(fsm);
 
   switch(signal) {
     case tiny_fsm_signal_entry:
-      StartAckTimeoutTimer(instance);
+      start_ack_timeout_timer(instance);
       break;
 
     case signal_byte_received: {
       reinterpret(byte, data, const uint8_t*);
-      if(*byte == Gea2Ack) {
-        HandleSuccess(instance);
+      if(*byte == tiny_gea3_ack) {
+        handle_success(instance);
       }
       else {
-        HandleSendFailure(instance);
+        handle_send_failure(instance);
       }
     } break;
 
-    case Signal_AckTimeout:
-      HandleSendFailure(instance);
+    case signal_ack_timeout:
+      handle_send_failure(instance);
       break;
   }
 }
 
 static bool received_packet_has_valid_crc(self_t* self)
 {
-  return self->receive_crc == 0;
+  return self->_private.receive.crc == 0;
 }
 
 static bool received_packet_has_minimum_valid_length(self_t* self)
 {
-  return self->receive_count >= packet_bytes_not_included_in_payload;
+  return self->_private.receive.count >= packet_bytes_not_included_in_payload;
 }
 
 static bool received_packet_has_valid_length(self_t* self)
 {
-  reinterpret(packet, self->receive_buffer, tiny_gea3_packet_t*);
-  return (packet->payload_length == self->receive_count + unbuffered_bytes);
+  reinterpret(packet, self->_private.receive.buffer, tiny_gea3_packet_t*);
+  return (packet->payload_length == self->_private.receive.count + unbuffered_bytes);
 }
 
-static bool received_packet_is_addressed_to_me(self_t* self)
+static void buffer_received_byte(self_t* instance, uint8_t byte)
 {
-  reinterpret(packet, self->receive_buffer, tiny_gea3_packet_t*);
-  return (packet->destination == self->address) || (packet->destination == tiny_gea3_broadcast_address);
-}
-
-////////// something
-
-static void buffer_received_byte(self_t* self, uint8_t byte)
-{
-  if(self->receive_count == 0) {
-    self->receive_crc = tiny_gea3_crc_seed;
+  if(instance->_private.receive.count == 0) {
+    instance->_private.receive.crc = tiny_gea3_crc_seed;
   }
 
-  if(self->receive_count < self->receive_buffer_size) {
-    self->receive_buffer[self->receive_count++] = byte;
+  if(instance->_private.receive.count < instance->_private.receive.bufferSize) {
+    instance->_private.receive.buffer[instance->_private.receive.count++] = byte;
 
-    self->receive_crc = tiny_crc16_byte(
-      self->receive_crc,
+    instance->_private.receive.crc = tiny_crc16_byte(
+      instance->_private.receive.crc,
       byte);
   }
 }
 
-static void byte_received(void* context, const void* _args)
+static bool received_packet_is_addressed_to_me(self_t* self)
 {
-  reinterpret(self, context, self_t*);
-  reinterpret(args, _args, const tiny_uart_on_receive_args_t*);
-  reinterpret(packet, self->receive_buffer, tiny_gea3_packet_t*);
-  uint8_t byte = args->byte;
+  reinterpret(packet, self->_private.receive.buffer, tiny_gea3_packet_t*);
+  return (packet->destination == self->_private.address) || (packet->destination == tiny_gea3_broadcast_address);
+}
 
-  if(self->receive_packet_ready) {
-    return;
+static void send_ack(self_t* instance, uint8_t address)
+{
+  if(!is_broadcast_address(address)) {
+    tiny_uart_send(instance->_private.uart, tiny_gea3_ack);
   }
+}
 
-  if(self->receive_escaped) {
-    self->receive_escaped = false;
-    buffer_received_byte(self, byte);
+static void process_received_byte(self_t* instance, const uint8_t byte)
+{
+  reinterpret(packet, instance->_private.receive.buffer, tiny_gea3_packet_t*);
+
+  if(instance->_private.receive.escaped) {
+    instance->_private.receive.escaped = false;
+    buffer_received_byte(instance, byte);
     return;
   }
 
   switch(byte) {
     case tiny_gea3_esc:
-      self->receive_escaped = true;
+      instance->_private.receive.escaped = true;
       break;
 
     case tiny_gea3_stx:
-      self->receive_count = 0;
-      self->stx_received = true;
+      instance->_private.receive.count = 0;
       break;
 
     case tiny_gea3_etx:
-      if(self->stx_received &&
-        received_packet_has_minimum_valid_length(self) &&
-        received_packet_has_valid_length(self) &&
-        received_packet_has_valid_crc(self) &&
-        received_packet_is_addressed_to_me(self)) {
-        packet->payload_length -= tiny_gea3_packet_transmission_overhead;
-        self->receive_packet_ready = true;
+      if(!received_packet_has_minimum_valid_length(instance) || !received_packet_has_valid_length(instance)) {
+        break;
       }
-      self->stx_received = false;
+
+      if(!received_packet_has_valid_crc(instance)) {
+        break;
+      }
+
+      if(!received_packet_is_addressed_to_me(instance)) {
+        break;
+      }
+
+      packet->payload_length -= tiny_gea3_packet_transmission_overhead;
+      instance->_private.receive.packetReady = true;
+
+      send_ack(instance, packet->destination);
+
+      tiny_fsm_transition(&instance->_private.fsm, state_idle_cooldown);
       break;
 
     default:
-      buffer_received_byte(self, byte);
+      buffer_received_byte(instance, byte);
       break;
   }
 }
 
-static bool determine_byte_to_send_considering_escapes(self_t* self, uint8_t byte, uint8_t* byteToSend)
+static tiny_timer_ticks_t get_collision_timeout(uint8_t address, uint8_t pseudoRandomNumber)
 {
-  if(!self->send_escaped && needs_escape(byte)) {
-    self->send_escaped = true;
-    *byteToSend = tiny_gea3_esc;
-  }
-  else {
-    self->send_escaped = false;
-    *byteToSend = byte;
-  }
-
-  return !self->send_escaped;
+  return 43 + (address & 0x1F) + ((pseudoRandomNumber ^ address) & 0x1F);
 }
 
-static void prepare_buffered_packet_for_transmission(self_t* self)
+static void collision_idle_timeout(void* context)
 {
-  reinterpret(sendPacket, self->send_buffer, send_packet_t*);
-  sendPacket->data_length += tiny_gea3_packet_transmission_overhead;
-  self->send_crc = tiny_crc16_block(tiny_gea3_crc_seed, (const uint8_t*)sendPacket, sendPacket->data_length - data_length_bytes_not_included_in_data);
-  self->send_state = send_state_data;
-  self->send_offset = 0;
+  self_t* instance = context;
+  tiny_fsm_send_signal(&instance->_private.fsm, signal_collision_idle_timeout, NULL);
 }
 
-static void byte_sent(void* context, const void* args)
+static void start_collision_idle_timeout_timer(self_t* instance)
 {
-  reinterpret(self, context, self_t*);
-  (void)args;
+  uint8_t currentTicks = (uint8_t)tiny_time_source_ticks(instance->_private.timerGroup.time_source);
+  tiny_timer_ticks_t collisionTimeoutTicks = get_collision_timeout(instance->_private.address, currentTicks);
 
-  if(!self->send_in_progress) {
-    if(tiny_queue_count(&self->send_queue) > 0) {
-      uint16_t size;
-      tiny_queue_dequeue(&self->send_queue, self->send_buffer, &size);
-      prepare_buffered_packet_for_transmission(self);
-      self->send_in_progress = true;
-      tiny_uart_send(self->uart, tiny_gea3_stx);
+  tiny_timer_start(
+    &instance->_private.timerGroup,
+    &instance->_private.timer,
+    collisionTimeoutTicks,
+    instance,
+    collision_idle_timeout);
+}
+
+static void state_collision_cooldown(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const void* data)
+{
+  self_t* instance = interface_from_fsm(fsm);
+
+  switch(signal) {
+    case tiny_fsm_signal_entry:
+      start_collision_idle_timeout_timer(instance);
+      break;
+
+    case signal_collision_idle_timeout:
+      tiny_fsm_transition(fsm, state_idle);
+      break;
+
+    case signal_byte_received: {
+      reinterpret(byte, data, const uint8_t*);
+      if(*byte == tiny_gea3_stx) {
+        tiny_fsm_transition(fsm, state_receive);
+      }
+    } break;
+  }
+}
+
+static void interbyte_timeout(void* context)
+{
+  self_t* instance = context;
+  tiny_fsm_send_signal(&instance->_private.fsm, signal_interbyte_timeout, NULL);
+}
+
+static void start_interbyte_timeout_timer(self_t* instance)
+{
+  tiny_timer_start(
+    &instance->_private.timerGroup,
+    &instance->_private.timer,
+    gea2_interbyte_timeout_msec,
+    instance,
+    interbyte_timeout);
+}
+
+static void state_receive(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const void* data)
+{
+  self_t* instance = interface_from_fsm(fsm);
+
+  switch(signal) {
+    case tiny_fsm_signal_entry:
+      instance->_private.receive.count = 0;
+      start_interbyte_timeout_timer(instance);
+      break;
+
+    case signal_byte_received: {
+      reinterpret(byte, data, const uint8_t*);
+      start_interbyte_timeout_timer(instance);
+      process_received_byte(instance, *byte);
+      break;
     }
-    return;
-  }
 
-  uint8_t byteToSend = 0;
-
-  switch(self->send_state) {
-    case send_state_data:
-      if(determine_byte_to_send_considering_escapes(self, self->send_buffer[self->send_offset], &byteToSend)) {
-        reinterpret(sendPacket, self->send_buffer, const send_packet_t*);
-        self->send_offset++;
-
-        if(self->send_offset >= sendPacket->data_length - data_length_bytes_not_included_in_data) {
-          self->send_state = send_state_crc_msb;
-        }
-      }
-      break;
-
-    case send_state_crc_msb:
-      byteToSend = self->send_crc >> 8;
-      if(determine_byte_to_send_considering_escapes(self, byteToSend, &byteToSend)) {
-        self->send_state = send_state_crc_lsb;
-      }
-      break;
-
-    case send_state_crc_lsb:
-      byteToSend = self->send_crc;
-      if(determine_byte_to_send_considering_escapes(self, byteToSend, &byteToSend)) {
-        self->send_state = send_state_etx;
-      }
-      break;
-
-    case send_state_etx:
-      self->send_in_progress = false;
-      byteToSend = tiny_gea3_etx;
+    case signal_interbyte_timeout:
+      tiny_fsm_transition(fsm, state_idle_cooldown);
       break;
   }
-
-  tiny_uart_send(self->uart, byteToSend);
 }
 
-static void populate_send_packet(
-  self_t* self,
-  tiny_gea3_packet_t* packet,
-  uint8_t destination,
-  uint8_t payload_length,
-  tiny_gea3_interface_send_callback_t callback,
-  void* context,
-  bool setSourceAddress)
+static void idle_cooldown_timeout(void* context)
 {
-  packet->payload_length = payload_length;
-  callback(context, (tiny_gea3_packet_t*)packet);
-  if(setSourceAddress) {
-    packet->source = self->address;
+  self_t* instance = context;
+  tiny_fsm_send_signal(&instance->_private.fsm, signal_idle_cooldown_timeout, NULL);
+}
+
+static tiny_timer_ticks_t GetIdleTimeout(uint8_t address)
+{
+  return 10 + (address & 0x1F);
+}
+
+static void state_idle_cooldown(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const void* data)
+{
+  self_t* instance = interface_from_fsm(fsm);
+
+  switch(signal) {
+    case tiny_fsm_signal_entry:
+      tiny_timer_start(
+        &instance->_private.timerGroup,
+        &instance->_private.timer,
+        GetIdleTimeout(instance->_private.address),
+        instance,
+        idle_cooldown_timeout);
+      break;
+
+    case signal_byte_received: {
+      reinterpret(byte, data, const uint8_t*);
+      if(*byte == tiny_gea3_stx && !instance->_private.receive.packetReady) {
+        tiny_fsm_transition(fsm, state_receive);
+      }
+      else {
+        tiny_fsm_transition(fsm, state_idle_cooldown);
+      }
+
+      break;
+    }
+
+    case signal_idle_cooldown_timeout:
+      tiny_fsm_transition(fsm, state_idle);
+      break;
   }
-  packet->destination = destination;
+}
+
+static void prepare_buffered_packet_for_transmission(self_t* instance)
+{
+  reinterpret(sendPacket, instance->_private.send.buffer, send_packet_t*);
+  sendPacket->data_length += tiny_gea3_packet_transmission_overhead;
+  instance->_private.send.crc = tiny_crc16_block(tiny_gea3_crc_seed, (uint8_t*)sendPacket, sendPacket->data_length - data_length_bytes_not_included_in_data);
+  instance->_private.send.state = send_state_stx;
+  instance->_private.send.offset = 0;
 }
 
 static void send_worker(
-  i_tiny_gea3_interface_t* _self,
+  i_tiny_gea3_interface_t* _instance,
   uint8_t destination,
   uint8_t payload_length,
   tiny_gea3_interface_send_callback_t callback,
   void* context,
   bool setSourceAddress)
 {
-  reinterpret(self, _self, self_t*);
-
-  if(payload_length + send_packet_header_size > self->send_buffer_size) {
+  reinterpret(instance, _instance, self_t*);
+  if(instance->_private.send.active) {
     return;
   }
 
-  if(self->send_in_progress) {
-    uint8_t buffer[255];
-    populate_send_packet(self, (tiny_gea3_packet_t*)buffer, destination, payload_length, callback, context, setSourceAddress);
-    tiny_queue_enqueue(&self->send_queue, buffer, tiny_gea3_packet_overhead + payload_length);
+  if(payload_length + send_packet_header_size > instance->_private.send.bufferSize) {
+    return;
   }
-  else {
-    reinterpret(sendPacket, self->send_buffer, tiny_gea3_packet_t*);
-    populate_send_packet(self, sendPacket, destination, payload_length, callback, context, setSourceAddress);
-    prepare_buffered_packet_for_transmission(self);
-    self->send_in_progress = true;
-    tiny_uart_send(self->uart, tiny_gea3_stx);
+
+  reinterpret(sendPacket, instance->_private.send.buffer, tiny_gea3_packet_t*);
+  sendPacket->payload_length = payload_length;
+  callback(context, sendPacket);
+
+  if(setSourceAddress) {
+    sendPacket->source = instance->_private.address;
   }
+
+  sendPacket->destination = destination;
+  prepare_buffered_packet_for_transmission(instance);
+
+  instance->_private.send.retries = instance->_private.retries;
+  instance->_private.send.active = true;
+  instance->_private.send.packetQueuedInBackground = true;
+}
+
+static void msec_interrupt(void* context, const void* _args)
+{
+  reinterpret(instance, context, self_t*);
+  (void)_args;
+
+  if(instance->_private.send.packetQueuedInBackground) {
+    instance->_private.send.packetQueuedInBackground = false;
+    tiny_fsm_send_signal(&instance->_private.fsm, signal_send_ready, NULL);
+  }
+
+  tiny_timer_group_run(&instance->_private.timerGroup);
 }
 
 static void send(
-  i_tiny_gea3_interface_t* _self,
+  i_tiny_gea3_interface_t* _instance,
   uint8_t destination,
   uint8_t payload_length,
   tiny_gea3_interface_send_callback_t callback,
   void* context)
 {
-  send_worker(_self, destination, payload_length, callback, context, true);
+  send_worker(_instance, destination, payload_length, callback, context, true);
 }
 
-static i_tiny_event_t* on_receive(i_tiny_gea3_interface_t* _self)
+static i_tiny_event_t* get_on_receive_event(i_tiny_gea3_interface_t* _instance)
 {
-  reinterpret(self, _self, self_t*);
-  return &self->on_receive.interface;
+  reinterpret(instance, _instance, self_t*);
+  return &instance->_private.onReceive.interface;
 }
 
-static const i_tiny_gea3_interface_api_t api = { send, on_receive };
+static const i_tiny_gea3_interface_api_t api = { send, get_on_receive_event };
 
-void tiny_gea3_interface_init(
-  tiny_gea3_interface_t* self,
+void tiny_gea2_interface_single_wire_init(
+  self_t* instance,
   i_tiny_uart_t* uart,
+  i_tiny_time_source_t* timeSource,
+  i_tiny_event_t* msecInterrupt,
+  uint8_t* receiveBuffer,
+  uint8_t receiveBufferSize,
+  uint8_t* sendBuffer,
+  uint8_t sendBufferSize,
   uint8_t address,
-  uint8_t* send_buffer,
-  uint8_t send_buffer_size,
-  uint8_t* receive_buffer,
-  uint8_t receive_buffer_size,
-  uint8_t* send_queue_buffer,
-  size_t send_queue_buffer_size)
+  bool ignoreDestinationAddress)
 {
-  self->interface.api = &api;
+  instance->interface.api = &api;
+  instance->_private.uart = uart;
+  instance->_private.address = address;
+  instance->_private.retries = default_retries;
+  instance->_private.ignoreDestinationAddress = ignoreDestinationAddress;
+  instance->_private.receive.buffer = receiveBuffer;
+  instance->_private.receive.bufferSize = receiveBufferSize;
+  instance->_private.receive.packetReady = false;
+  instance->_private.receive.escaped = false;
+  instance->_private.send.buffer = sendBuffer;
+  instance->_private.send.bufferSize = sendBufferSize;
+  instance->_private.send.active = false;
+  instance->_private.send.packetQueuedInBackground = false;
 
-  self->uart = uart;
-  self->address = address;
-  self->send_buffer = send_buffer;
-  self->send_buffer_size = send_buffer_size;
-  self->receive_buffer = receive_buffer;
-  self->receive_buffer_size = receive_buffer_size;
-  self->receive_escaped = false;
-  self->send_in_progress = false;
-  self->send_escaped = false;
-  self->stx_received = false;
-  self->receive_packet_ready = false;
-  self->receive_count = 0;
+  tiny_timer_group_init(&instance->_private.timerGroup, timeSource);
 
-  tiny_event_init(&self->on_receive);
+  tiny_event_subscription_init(&instance->_private.byteReceivedSubscription, instance, byte_received);
+  tiny_event_subscribe(tiny_uart_on_receive(uart), &instance->_private.byteReceivedSubscription);
 
-  tiny_queue_init(&self->send_queue, send_queue_buffer, send_queue_buffer_size);
+  tiny_event_subscription_init(&instance->_private.msecInterruptSubscription, instance, msec_interrupt);
+  tiny_event_subscribe(msecInterrupt, &instance->_private.msecInterruptSubscription);
 
-  tiny_event_subscription_init(&self->byte_received_subscfription, self, byte_received);
-  tiny_event_subscription_init(&self->byte_sent_subscription, self, byte_sent);
+  tiny_event_init(&instance->_private.onReceive);
+  tiny_event_init(&instance->_private.onDiagnosticsEvent);
 
-  tiny_event_subscribe(tiny_uart_on_receive(uart), &self->byte_received_subscfription);
-  tiny_event_subscribe(tiny_uart_on_send_complete(uart), &self->byte_sent_subscription);
+  tiny_fsm_init(&instance->_private.fsm, state_idle);
 }
 
-void tiny_gea3_interface_run(self_t* self)
+void tiny_gea2_interface_single_wire_run(self_t* instance)
 {
-  if(self->receive_packet_ready) {
+  if(instance->_private.receive.packetReady) {
     tiny_gea3_interface_on_receive_args_t args;
-    args.packet = (const tiny_gea3_packet_t*)self->receive_buffer;
-    tiny_event_publish(&self->on_receive, &args);
+    args.packet = (const tiny_gea3_packet_t*)instance->_private.receive.buffer;
 
-    // Can only be cleared _after_ publication so that the buffer isn't reused
-    self->receive_packet_ready = false;
+    tiny_event_publish(&instance->_private.onReceive, &args);
+    instance->_private.receive.packetReady = false;
   }
+}
+
+void tiny_gea2_interface_single_wire_set_retries(tiny_gea2_interface_single_wire_t* instance, uint8_t retries)
+{
+  instance->_private.retries = retries;
 }

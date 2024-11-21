@@ -9,3 +9,6 @@ Provides a simple interface for sending and receiving GEA3 serial packets.
 
 ### `tiny_erd_client`
 Provides a simple interface for reading and writing addressable data (ERDs) over a GEA3 serial interface.
+
+## `tiny_gea2_interface_single_wire`
+Provides a simple interface for sending and receiving GEA2 serial packets on a half duplex setup.
