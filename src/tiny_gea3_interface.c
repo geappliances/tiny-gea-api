@@ -56,7 +56,9 @@ static bool received_packet_has_valid_length(self_t* self)
 static bool received_packet_is_addressed_to_me(self_t* self)
 {
   reinterpret(packet, self->receive_buffer, tiny_gea3_packet_t*);
-  return (packet->destination == self->address) || (packet->destination == tiny_gea3_broadcast_address);
+  return (packet->destination == self->address) ||
+    (packet->destination == tiny_gea3_broadcast_address) ||
+    (self->ignore_destination_address);
 }
 
 static void buffer_received_byte(self_t* self, uint8_t byte)
@@ -212,7 +214,7 @@ static void populate_send_packet(
   packet->destination = destination;
 }
 
-static void send_worker(
+static bool send_worker(
   i_tiny_gea3_interface_t* _self,
   uint8_t destination,
   uint8_t payload_length,
@@ -223,13 +225,16 @@ static void send_worker(
   reinterpret(self, _self, self_t*);
 
   if(payload_length + send_packet_header_size > self->send_buffer_size) {
-    return;
+    return false;
   }
 
   if(self->send_in_progress) {
     uint8_t buffer[255];
     populate_send_packet(self, (tiny_gea3_packet_t*)buffer, destination, payload_length, callback, context, setSourceAddress);
-    tiny_queue_enqueue(&self->send_queue, buffer, tiny_gea3_packet_overhead + payload_length);
+    if(!tiny_queue_enqueue(&self->send_queue, buffer, tiny_gea3_packet_overhead + payload_length))
+    {
+      return false;
+    }
   }
   else {
     reinterpret(sendPacket, self->send_buffer, tiny_gea3_packet_t*);
@@ -238,16 +243,28 @@ static void send_worker(
     self->send_in_progress = true;
     tiny_uart_send(self->uart, tiny_gea3_stx);
   }
+
+  return true;
 }
 
-static void send(
+static bool send(
   i_tiny_gea3_interface_t* _self,
   uint8_t destination,
   uint8_t payload_length,
   tiny_gea3_interface_send_callback_t callback,
   void* context)
 {
-  send_worker(_self, destination, payload_length, callback, context, true);
+  return send_worker(_self, destination, payload_length, callback, context, true);
+}
+
+static bool forward(
+  i_tiny_gea3_interface_t* _self,
+  uint8_t destination,
+  uint8_t payload_length,
+  tiny_gea3_interface_send_callback_t callback,
+  void* context)
+{
+  return send_worker(_self, destination, payload_length, callback, context, false);
 }
 
 static i_tiny_event_t* on_receive(i_tiny_gea3_interface_t* _self)
@@ -256,7 +273,7 @@ static i_tiny_event_t* on_receive(i_tiny_gea3_interface_t* _self)
   return &self->on_receive.interface;
 }
 
-static const i_tiny_gea3_interface_api_t api = { send, on_receive };
+static const i_tiny_gea3_interface_api_t api = { send, forward, on_receive };
 
 void tiny_gea3_interface_init(
   tiny_gea3_interface_t* self,
@@ -267,7 +284,8 @@ void tiny_gea3_interface_init(
   uint8_t* receive_buffer,
   uint8_t receive_buffer_size,
   uint8_t* send_queue_buffer,
-  size_t send_queue_buffer_size)
+  size_t send_queue_buffer_size,
+  bool ignore_destination_address)
 {
   self->interface.api = &api;
 
@@ -277,6 +295,7 @@ void tiny_gea3_interface_init(
   self->send_buffer_size = send_buffer_size;
   self->receive_buffer = receive_buffer;
   self->receive_buffer_size = receive_buffer_size;
+  self->ignore_destination_address = ignore_destination_address;
   self->receive_escaped = false;
   self->send_in_progress = false;
   self->send_escaped = false;
@@ -288,10 +307,10 @@ void tiny_gea3_interface_init(
 
   tiny_queue_init(&self->send_queue, send_queue_buffer, send_queue_buffer_size);
 
-  tiny_event_subscription_init(&self->byte_received_subscfription, self, byte_received);
+  tiny_event_subscription_init(&self->byte_received_subscription, self, byte_received);
   tiny_event_subscription_init(&self->byte_sent_subscription, self, byte_sent);
 
-  tiny_event_subscribe(tiny_uart_on_receive(uart), &self->byte_received_subscfription);
+  tiny_event_subscribe(tiny_uart_on_receive(uart), &self->byte_received_subscription);
   tiny_event_subscribe(tiny_uart_on_send_complete(uart), &self->byte_sent_subscription);
 }
 

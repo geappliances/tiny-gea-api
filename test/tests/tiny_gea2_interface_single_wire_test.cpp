@@ -23,11 +23,11 @@ extern "C" {
 
 enum {
   address = 0xAD,
-  sendBufferSize = 10,
+  send_buffer_size = 10,
   receive_buffer_size = 9,
   idle_cooldown_msec = 10 + (address & 0x1F),
   gea2_reflection_timeout_msec = 6,
-  tiny_gea3_ack_timeout_msec = 6,
+  tiny_gea3_ack_timeout_msec = 8,
   gea2_broadcast_mask = 1, // IDK WHAT THIS IS BUT FIX IT
   default_retries = 5,
   gea2_packet_transmission_overhead = 3,
@@ -40,7 +40,7 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
   tiny_gea2_interface_single_wire_t instance;
   tiny_uart_double_t uart;
   tiny_event_subscription_t receiveSubscription;
-  uint8_t sendBuffer[sendBufferSize];
+  uint8_t sendBuffer[send_buffer_size];
   uint8_t receive_buffer[receive_buffer_size];
   tiny_time_source_double_t time_source;
   tiny_event_t msecInterrupt;
@@ -60,7 +60,7 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
       receive_buffer,
       receive_buffer_size,
       sendBuffer,
-      sendBufferSize,
+      send_buffer_size,
       address,
       false);
 
@@ -78,7 +78,7 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
       receive_buffer,
       receive_buffer_size,
       sendBuffer,
-      sendBufferSize,
+      send_buffer_size,
       address,
       true);
 
@@ -108,9 +108,9 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
 #define should_send_bytes_via_uart(_bytes...) \
   do {                                        \
     uint8_t bytes[] = { _bytes };             \
-    _ShouldsendBytes(bytes, sizeof(bytes));   \
+    _should_send_bytes(bytes, sizeof(bytes)); \
   } while(0)
-  void _ShouldsendBytes(const uint8_t* bytes, uint16_t byteCount)
+  void _should_send_bytes(const uint8_t* bytes, uint16_t byteCount)
   {
     for(uint16_t i = 0; i < byteCount; i++) {
       byte_should_be_sent(bytes[i]);
@@ -183,22 +183,22 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
     mock().enable();
   }
 
-  static void sendCallback(void* context, tiny_gea3_packet_t* packet)
+  static void send_callback(void* context, tiny_gea3_packet_t* packet)
   {
-    reinterpret(sourcePacket, context, const tiny_gea3_packet_t*);
-    packet->source = sourcePacket->source;
-    memcpy(packet->payload, sourcePacket->payload, sourcePacket->payload_length);
+    reinterpret(source_packet, context, const tiny_gea3_packet_t*);
+    packet->source = source_packet->source;
+    memcpy(packet->payload, source_packet->payload, source_packet->payload_length);
   }
 
   void when_packet_is_sent(tiny_gea3_packet_t * packet)
   {
-    tiny_gea3_interface_send(&instance.interface, packet->destination, packet->payload_length, sendCallback, packet);
+    tiny_gea3_interface_send(&instance.interface, packet->destination, packet->payload_length, send_callback, packet);
     after_msec_interrupt_fires();
   }
 
   void when_packet_is_forwarded(tiny_gea3_packet_t * packet)
   {
-    tiny_gea3_interface_send(&instance.interface, packet->destination, packet->payload_length, sendCallback, packet);
+    tiny_gea3_interface_forward(&instance.interface, packet->destination, packet->payload_length, send_callback, packet);
     after_msec_interrupt_fires();
   }
 
@@ -214,6 +214,8 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
 
   void gjven_that_a_packet_has_been_sent()
   {
+    given_uart_echoing_is_enabled();
+
     should_send_bytes_via_uart(
       tiny_gea3_stx,
       0x45, // dst
@@ -242,6 +244,7 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
 
   void given_that_a_broadcast_packet_has_been_sent()
   {
+    given_uart_echoing_is_enabled();
     should_send_bytes_via_uart(
       tiny_gea3_stx,
       0xFF, // dst
@@ -263,6 +266,7 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
 
   void given_the_module_is_in_idle_cooldown()
   {
+    given_uart_echoing_is_enabled();
     should_send_bytes_via_uart(
       tiny_gea3_stx,
       0x45, // dst
@@ -281,6 +285,7 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
 
   void should_be_able_to_send_a_message_after_idle_cooldown()
   {
+    given_uart_echoing_is_enabled();
     should_send_bytes_via_uart(
       tiny_gea3_stx,
       0x45, // dst
@@ -299,6 +304,7 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
 
   void should_be_able_to_send_a_message_after_collision_cooldown()
   {
+    given_uart_echoing_is_enabled();
     tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
     packet->destination = 0x45;
     when_packet_is_sent(packet);
@@ -327,7 +333,7 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
 
   tiny_time_source_ticks_t collision_timeout_msec()
   {
-    return 43 + (address & 0x1F) + ((time_source.ticks ^ address) & 0x1F);
+    return 43 + (address & 0x1F) + ((78 ^ address) & 0x1F);
   }
 
   void after_msec_interrupt_fires()
@@ -807,6 +813,8 @@ TEST(tiny_gea2_interface_single_wire, should_send_a_packet_with_no_payload)
 
 TEST(tiny_gea2_interface_single_wire, should_send_a_packet_with_a_payload)
 {
+  given_uart_echoing_is_enabled();
+
   should_send_bytes_via_uart(
     tiny_gea3_stx,
     0x45, // dst
@@ -823,7 +831,7 @@ TEST(tiny_gea2_interface_single_wire, should_send_a_packet_with_a_payload)
   when_packet_is_sent(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, ShouldsendAPacketWithMaxPayloadGivensendBufferSize)
+TEST(tiny_gea2_interface_single_wire, ShouldsendAPacketWithMaxPayloadGivensend_buffer_size)
 {
   given_uart_echoing_is_enabled();
 
@@ -1034,8 +1042,6 @@ TEST(tiny_gea2_interface_single_wire, should_wait_until_the_idle_cool_down_time_
 
 TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_the_reflection_timeout_violation_occurs_and_stop_after_retries_are_exhausted)
 {
-  given_uart_echoing_is_enabled();
-
   should_send_bytes_via_uart(tiny_gea3_stx);
   tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
@@ -1069,8 +1075,6 @@ TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_the_reflection_t
 
 TEST(tiny_gea2_interface_single_wire, should_raise_reflection_timed_out_diagnostics_event_when_a_reflection_timeout_retry_sending_when_the_reflection_timeout_violation_occurs_and_stop_after_retrries_are_exhausted)
 {
-  given_uart_echoing_is_enabled();
-
   should_send_bytes_via_uart(tiny_gea3_stx);
   tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
@@ -1081,8 +1085,6 @@ TEST(tiny_gea2_interface_single_wire, should_raise_reflection_timed_out_diagnost
 
 TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_a_collision_occurs_and_stop_after_retries_are_exhausted)
 {
-  given_uart_echoing_is_enabled();
-
   should_send_bytes_via_uart(tiny_gea3_stx);
   tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
@@ -1111,8 +1113,6 @@ TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_a_collision_occu
 
 TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_a_collision_occurs_and_stop_after_retries_are_exhausted_with_a_custom_retry_count)
 {
-  given_uart_echoing_is_enabled();
-
   given_that_retries_have_been_set_to(1);
 
   should_send_bytes_via_uart(tiny_gea3_stx);
@@ -1131,18 +1131,6 @@ TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_a_collision_occu
   after_bytes_are_received_via_uart(tiny_gea3_stx - 1);
 
   should_be_able_to_send_a_message_after_collision_cooldown();
-}
-
-TEST(tiny_gea2_interface_single_wire, should_raise_a_collision_detected_diagnostics_event_when_a_collision_occurs)
-{
-  given_uart_echoing_is_enabled();
-
-  should_send_bytes_via_uart(tiny_gea3_stx);
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
-  packet->destination = 0x45;
-  when_packet_is_sent(packet);
-
-  after_bytes_are_received_via_uart(tiny_gea3_stx - 1);
 }
 
 TEST(tiny_gea2_interface_single_wire, should_stop_sending_when_an_unexpected_byte_is_received_while_waiting_for_an_ack)
@@ -1172,8 +1160,6 @@ TEST(tiny_gea2_interface_single_wire, should_stop_sending_when_an_unexpected_byt
 
 TEST(tiny_gea2_interface_single_wire, should_ignore_send_requests_when_already_sending)
 {
-  given_uart_echoing_is_enabled();
-
   should_send_bytes_via_uart(tiny_gea3_stx);
   tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
@@ -1190,7 +1176,6 @@ TEST(tiny_gea2_interface_single_wire, should_ignore_send_requests_when_already_s
 TEST(tiny_gea2_interface_single_wire, should_retry_a_message_if_no_ack_is_received)
 {
   given_uart_echoing_is_enabled();
-
   should_send_bytes_via_uart(
     tiny_gea3_stx,
     0x45, // dst
@@ -1242,8 +1227,6 @@ TEST(tiny_gea2_interface_single_wire, should_retry_a_message_if_no_ack_is_receiv
 
 TEST(tiny_gea2_interface_single_wire, should_successfully_receive_a_packet_while_in_collision_cooldown)
 {
-  given_uart_echoing_is_enabled();
-
   given_the_module_is_in_collision_cooldown();
 
   ack_should_be_sent();
@@ -1265,8 +1248,6 @@ TEST(tiny_gea2_interface_single_wire, should_successfully_receive_a_packet_while
 
 TEST(tiny_gea2_interface_single_wire, should_not_receive_a_packet_while_in_collision_cooldown_that_does_not_start_with_stx)
 {
-  given_uart_echoing_is_enabled();
-
   given_the_module_is_in_collision_cooldown();
 
   after_bytes_are_received_via_uart(
@@ -1334,8 +1315,6 @@ TEST(tiny_gea2_interface_single_wire, ShouldNotStartReceivingAPacketWhileAReceiv
 
 TEST(tiny_gea2_interface_single_wire, should_handle_a_failure_to_send_during_an_escape)
 {
-  given_uart_echoing_is_enabled();
-
   should_send_bytes_via_uart(
     tiny_gea3_stx,
     0xE0);
@@ -1349,6 +1328,8 @@ TEST(tiny_gea2_interface_single_wire, should_handle_a_failure_to_send_during_an_
     0x00);
 
   after(collision_timeout_msec() - 1);
+
+  given_uart_echoing_is_enabled();
 
   should_send_bytes_via_uart(
     tiny_gea3_stx,

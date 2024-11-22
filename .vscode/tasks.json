@@ -6,7 +6,7 @@
     {
       "label": "Build",
       "type": "shell",
-      "command": "make test"
+      "command": "make build/arduino-gea3-api_tests"
     }
   ]
 }

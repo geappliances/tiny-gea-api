@@ -26,7 +26,14 @@ typedef struct {
 } i_tiny_gea3_interface_t;
 
 typedef struct i_tiny_gea3_interface_api_t {
-  void (*send)(
+  bool (*send)(
+    i_tiny_gea3_interface_t* self,
+    uint8_t destination,
+    uint8_t payload_length,
+    tiny_gea3_interface_send_callback_t callback,
+    void* context);
+
+  bool (*forward)(
     i_tiny_gea3_interface_t* self,
     uint8_t destination,
     uint8_t payload_length,
@@ -40,16 +47,30 @@ typedef struct i_tiny_gea3_interface_api_t {
  * Send a packet by getting direct access to the internal send buffer (given to
  * the client via the provided callback). Sets the source and destination addresses
  * of the packet automatically. If the requested payload size is too large then the
- * callback will not be invoked.
+ * callback will not be invoked. Returns false if packet is dropped due to size
+ * or activity.
  */
-static inline void tiny_gea3_interface_send(
+static inline bool tiny_gea3_interface_send(
   i_tiny_gea3_interface_t* self,
   uint8_t destination,
   uint8_t payload_length,
   tiny_gea3_interface_send_callback_t callback,
   void* context)
 {
-  self->api->send(self, destination, payload_length, callback, context);
+  return self->api->send(self, destination, payload_length, callback, context);
+}
+
+/*!
+ * Send a packet without setting source address
+ */
+static inline bool tiny_gea3_interface_forward(
+  i_tiny_gea3_interface_t* self,
+  uint8_t destination,
+  uint8_t payload_length,
+  tiny_gea3_interface_send_callback_t callback,
+  void* context)
+{
+  return self->api->forward(self, destination, payload_length, callback, context);
 }
 
 /*!

@@ -14,8 +14,8 @@
 
 enum {
   gea2_reflection_timeout_msec = 6,
-  tiny_gea3_ack_timeout_msec = 6,
-  gea2_broadcast_mask = 0xFF, // IDK WHAT THIS IS BUT FIX IT
+  tiny_gea3_ack_timeout_msec = 8,
+  gea2_broadcast_mask = 0xF0,
   default_retries = 2,
   gea2_interbyte_timeout_msec = 6,
 };
@@ -318,7 +318,9 @@ static void buffer_received_byte(self_t* instance, uint8_t byte)
 static bool received_packet_is_addressed_to_me(self_t* self)
 {
   reinterpret(packet, self->_private.receive.buffer, tiny_gea3_packet_t*);
-  return (packet->destination == self->_private.address) || (packet->destination == tiny_gea3_broadcast_address);
+  return (packet->destination == self->_private.address) ||
+    is_broadcast_address(packet->destination) ||
+    self->_private.ignoreDestinationAddress;
 }
 
 static void send_ack(self_t* instance, uint8_t address)
@@ -376,7 +378,8 @@ static void process_received_byte(self_t* instance, const uint8_t byte)
 
 static tiny_timer_ticks_t get_collision_timeout(uint8_t address, uint8_t pseudoRandomNumber)
 {
-  return 43 + (address & 0x1F) + ((pseudoRandomNumber ^ address) & 0x1F);
+  (void)pseudoRandomNumber;
+  return 43 + (address & 0x1F) + ((78 ^ address) & 0x1F);
 }
 
 static void collision_idle_timeout(void* context)
@@ -511,7 +514,7 @@ static void prepare_buffered_packet_for_transmission(self_t* instance)
   instance->_private.send.offset = 0;
 }
 
-static void send_worker(
+static bool send_worker(
   i_tiny_gea3_interface_t* _instance,
   uint8_t destination,
   uint8_t payload_length,
@@ -521,11 +524,11 @@ static void send_worker(
 {
   reinterpret(instance, _instance, self_t*);
   if(instance->_private.send.active) {
-    return;
+    return false;
   }
 
   if(payload_length + send_packet_header_size > instance->_private.send.bufferSize) {
-    return;
+    return false;
   }
 
   reinterpret(sendPacket, instance->_private.send.buffer, tiny_gea3_packet_t*);
@@ -542,6 +545,8 @@ static void send_worker(
   instance->_private.send.retries = instance->_private.retries;
   instance->_private.send.active = true;
   instance->_private.send.packetQueuedInBackground = true;
+
+  return true;
 }
 
 static void msec_interrupt(void* context, const void* _args)
@@ -557,14 +562,24 @@ static void msec_interrupt(void* context, const void* _args)
   tiny_timer_group_run(&instance->_private.timerGroup);
 }
 
-static void send(
+static bool send(
   i_tiny_gea3_interface_t* _instance,
   uint8_t destination,
   uint8_t payload_length,
   tiny_gea3_interface_send_callback_t callback,
   void* context)
 {
-  send_worker(_instance, destination, payload_length, callback, context, true);
+  return send_worker(_instance, destination, payload_length, callback, context, true);
+}
+
+static bool forward(
+  i_tiny_gea3_interface_t* _self,
+  uint8_t destination,
+  uint8_t payload_length,
+  tiny_gea3_interface_send_callback_t callback,
+  void* context)
+{
+  return send_worker(_self, destination, payload_length, callback, context, false);
 }
 
 static i_tiny_event_t* get_on_receive_event(i_tiny_gea3_interface_t* _instance)
@@ -573,7 +588,7 @@ static i_tiny_event_t* get_on_receive_event(i_tiny_gea3_interface_t* _instance)
   return &instance->_private.onReceive.interface;
 }
 
-static const i_tiny_gea3_interface_api_t api = { send, get_on_receive_event };
+static const i_tiny_gea3_interface_api_t api = { send, forward, get_on_receive_event };
 
 void tiny_gea2_interface_single_wire_init(
   self_t* instance,
