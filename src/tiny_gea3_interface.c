@@ -231,8 +231,7 @@ static bool send_worker(
   if(self->send_in_progress) {
     uint8_t buffer[255];
     populate_send_packet(self, (tiny_gea3_packet_t*)buffer, destination, payload_length, callback, context, setSourceAddress);
-    if(!tiny_queue_enqueue(&self->send_queue, buffer, tiny_gea3_packet_overhead + payload_length))
-    {
+    if(!tiny_queue_enqueue(&self->send_queue, buffer, tiny_gea3_packet_overhead + payload_length)) {
       return false;
     }
   }

@@ -110,9 +110,9 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
     uint8_t bytes[] = { _bytes };             \
     _should_send_bytes(bytes, sizeof(bytes)); \
   } while(0)
-  void _should_send_bytes(const uint8_t* bytes, uint16_t byteCount)
+  void _should_send_bytes(const uint8_t* bytes, uint16_t byte_count)
   {
-    for(uint16_t i = 0; i < byteCount; i++) {
+    for(uint16_t i = 0; i < byte_count; i++) {
       byte_should_be_sent(bytes[i]);
     }
   }
@@ -123,9 +123,9 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
     _after_bytes_are_received_via_uart(bytes, sizeof(bytes)); \
   } while(0)
 
-  void _after_bytes_are_received_via_uart(const uint8_t* bytes, uint16_t byteCount)
+  void _after_bytes_are_received_via_uart(const uint8_t* bytes, uint16_t byte_count)
   {
-    for(uint16_t i = 0; i < byteCount; i++) {
+    for(uint16_t i = 0; i < byte_count; i++) {
       when_byte_is_received(bytes[i]);
     }
   }
