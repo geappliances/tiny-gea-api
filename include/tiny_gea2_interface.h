@@ -14,7 +14,10 @@
  *
  * If a message is received, all messages received after will be dropped until
  * tiny_gea2_interface_run() is called.
- * Copyright GE Appliances - Confidential - All rights reserved.
+ *
+ * Note: This module requires an interrupt event . This "interrupt" is an event
+ * that needs to happen in the same context as the `on_receive`.
+ *
  */
 
 #ifndef tiny_gea2_interface_h
@@ -81,8 +84,7 @@ typedef struct
  * @param instance
  * @param uart
  * @param time_source
- * @param msec_interrupt Used to run timing in the interrupt context. Must not pre-empt or be pre-empted by
- *   UART interrupts.
+ * @param msec_interrupt
  * @param receive_buffer
  * @param receive_buffer_size
  * @param send_buffer

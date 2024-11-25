@@ -2,7 +2,6 @@
  * @file
  * @brief
  *
- * Copyright GE Appliances - Confidential - All rights reserved.
  */
 
 #ifndef tiny_erd_client_double_hpp
