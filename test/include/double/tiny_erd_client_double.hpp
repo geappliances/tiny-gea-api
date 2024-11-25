@@ -1,7 +1,6 @@
 /*!
  * @file
  * @brief
- *
  */
 
 #ifndef tiny_erd_client_double_hpp

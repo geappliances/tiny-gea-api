@@ -1,7 +1,6 @@
 /*!
  * @file
  * @brief
- *
  */
 
 #include "CppUTestExt/MockSupport.h"
