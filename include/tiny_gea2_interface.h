@@ -92,7 +92,8 @@ void tiny_gea2_interface_init(
   uint8_t receive_buffer_size,
   uint8_t* send_buffer,
   uint8_t send_buffer_size,
-  uint8_t address);
+  uint8_t address,
+  bool ignore_destination_address);
 
 /*!
  * Run the interface and publish received packets.

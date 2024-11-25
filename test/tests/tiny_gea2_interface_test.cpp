@@ -60,7 +60,8 @@ TEST_GROUP(tiny_gea2_interface)
       receive_buffer_size,
       send_buffer,
       send_buffer_size,
-      address);
+      address,
+      false);
 
     tiny_event_subscription_init(&receiveSubscription, NULL, packet_received);
     tiny_event_subscribe(tiny_gea3_interface_on_receive(&instance.interface), &receiveSubscription);
@@ -77,7 +78,8 @@ TEST_GROUP(tiny_gea2_interface)
       receive_buffer_size,
       send_buffer,
       send_buffer_size,
-      address);
+      address,
+      true);
 
     tiny_event_subscribe(tiny_gea3_interface_on_receive(&instance.interface), &receiveSubscription);
   }
@@ -1363,4 +1365,29 @@ TEST(tiny_gea2_interface, should_enter_idle_cooldown_when_a_non_stx_byte_is_rece
     0x39,
     tiny_gea3_etx);
   after(1);
+}
+
+TEST(tiny_gea2_interface, should_receive_packets_addressed_to_other_nodes_when_ignore_destination_address_is_enabled)
+{
+  given_uart_echoing_is_enabled();
+
+  given_that_ignore_destination_address_is_enabled();
+
+  ack_should_be_sent();
+  after_bytes_are_received_via_uart(
+    tiny_gea3_stx,
+    address + 1, // dst
+    0x08, // len
+    0x45, // src
+    0xBF, // payload
+    0xEF, // crc
+    0xD1,
+    tiny_gea3_etx);
+
+  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  packet->destination = address + 1;
+  packet->source = 0x45;
+  packet->payload[0] = 0xBF;
+  packet_should_be_received(packet);
+  after_the_interface_is_run();
 }
