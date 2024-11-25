@@ -45,7 +45,7 @@ enum {
 /*!
  * Macro for statically allocating a GEA3 packet with a given payload size.  Payload size is set automatically.
  */
-#define tiny_gea3_STATIC_ALLOC_PACKET(_name, _payloadLength)                                        \
+#define tiny_gea_STATIC_ALLOC_PACKET(_name, _payloadLength)                                         \
   static uint8_t _name##Storage[_payloadLength + tiny_gea_packet_overhead] = { 0, _payloadLength }; \
   static tiny_gea_packet_t* const _name = (tiny_gea_packet_t*)_name##Storage
 

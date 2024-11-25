@@ -217,7 +217,7 @@ TEST_GROUP(tiny_gea2_interface)
   {
     should_send_bytes_via_uart(tiny_gea_stx);
 
-    tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+    tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
     packet->destination = 0x45;
     packet->payload[0] = 0xC8;
     when_packet_is_sent(packet);
@@ -236,7 +236,7 @@ TEST_GROUP(tiny_gea2_interface)
       0x39,
       tiny_gea_etx);
 
-    tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+    tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
     packet->destination = 0x45;
     when_packet_is_sent(packet);
   }
@@ -265,7 +265,7 @@ TEST_GROUP(tiny_gea2_interface)
       0x07,
       tiny_gea_etx);
 
-    tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+    tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
     packet->destination = 0xFF;
     when_packet_is_sent(packet);
   }
@@ -287,7 +287,7 @@ TEST_GROUP(tiny_gea2_interface)
       0x39,
       tiny_gea_etx);
 
-    tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+    tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
     packet->destination = 0x45;
     when_packet_is_sent(packet);
 
@@ -306,7 +306,7 @@ TEST_GROUP(tiny_gea2_interface)
       0x39,
       tiny_gea_etx);
 
-    tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+    tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
     packet->destination = 0x45;
     when_packet_is_sent(packet);
 
@@ -316,7 +316,7 @@ TEST_GROUP(tiny_gea2_interface)
   void should_be_able_to_send_a_message_after_collision_cooldown()
   {
     given_uart_echoing_is_enabled();
-    tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+    tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
     packet->destination = 0x45;
     when_packet_is_sent(packet);
 
@@ -335,7 +335,7 @@ TEST_GROUP(tiny_gea2_interface)
   void given_the_module_is_in_collision_cooldown()
   {
     should_send_bytes_via_uart(tiny_gea_stx);
-    tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+    tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
     packet->destination = 0x45;
     when_packet_is_sent(packet);
 
@@ -365,7 +365,7 @@ TEST(tiny_gea2_interface, should_receive_a_packet_with_no_payload_and_send_an_ac
     0x8F,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = address;
   packet->source = 0x45;
   packet_should_be_received(packet);
@@ -385,7 +385,7 @@ TEST(tiny_gea2_interface, should_receive_a_packet_with_a_payload)
     0x0D,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
@@ -409,7 +409,7 @@ TEST(tiny_gea2_interface, should_receive_a_packet_with_maximum_payload)
     0x48,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 4);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 4);
   packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = 0x01;
@@ -474,7 +474,7 @@ TEST(tiny_gea2_interface, should_receive_a_packet_with_escapes)
     0x3D,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 4);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 4);
   packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = tiny_gea_esc;
@@ -497,7 +497,7 @@ TEST(tiny_gea2_interface, should_receive_broadcast_packets)
     0x5E,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0xFF;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
@@ -517,7 +517,7 @@ TEST(tiny_gea2_interface, should_receive_product_line_specific_broadcast_packets
     0x6C,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0xF3;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
@@ -554,7 +554,7 @@ TEST(tiny_gea2_interface, should_receive_multiple_packets)
       0x8F,
       tiny_gea_etx);
 
-    tiny_gea3_STATIC_ALLOC_PACKET(packet1, 0);
+    tiny_gea_STATIC_ALLOC_PACKET(packet1, 0);
     packet1->destination = address;
     packet1->source = 0x45;
     packet_should_be_received(packet1);
@@ -573,7 +573,7 @@ TEST(tiny_gea2_interface, should_receive_multiple_packets)
       0x0D,
       tiny_gea_etx);
 
-    tiny_gea3_STATIC_ALLOC_PACKET(packet2, 1);
+    tiny_gea_STATIC_ALLOC_PACKET(packet2, 1);
     packet2->destination = address;
     packet2->source = 0x45;
     packet2->payload[0] = 0xBF;
@@ -651,7 +651,7 @@ TEST(tiny_gea2_interface, should_drop_packets_received_before_publishing_a_previ
     0x5E,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
@@ -675,7 +675,7 @@ TEST(tiny_gea2_interface, should_receive_a_packet_after_a_previous_packet_is_abo
     0x0D,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
@@ -697,7 +697,7 @@ TEST(tiny_gea2_interface, should_drop_bytes_received_prior_to_stx)
     0x0D,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
@@ -723,7 +723,7 @@ TEST(tiny_gea2_interface, should_not_publish_received_packets_prior_to_receiving
   ack_should_be_sent();
   after_bytes_are_received_via_uart(tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
@@ -817,7 +817,7 @@ TEST(tiny_gea2_interface, should_send_a_packet_with_no_payload)
     0x39,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
   when_packet_is_sent(packet);
 }
@@ -836,7 +836,7 @@ TEST(tiny_gea2_interface, should_send_a_packet_with_a_payload)
     0xD3,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0x45;
   packet->payload[0] = 0xD5;
   when_packet_is_sent(packet);
@@ -862,7 +862,7 @@ TEST(tiny_gea2_interface, should_send_a_packet_with_max_payload_given_send_buffe
     0xD5,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 7);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 7);
   packet->destination = 0x45;
   packet->payload[0] = 0x00;
   packet->payload[1] = 0x01;
@@ -888,7 +888,7 @@ TEST(tiny_gea2_interface, should_raise_a_packet_sent_event_when_a_packet_is_sent
     0xD3,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0x45;
   packet->payload[0] = 0xD5;
   when_packet_is_sent(packet);
@@ -898,7 +898,7 @@ TEST(tiny_gea2_interface, should_not_send_a_packet_that_is_too_large_for_the_sen
 {
   given_uart_echoing_is_enabled();
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 8);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 8);
 
   when_packet_is_sent(packet);
 }
@@ -918,7 +918,7 @@ TEST(tiny_gea2_interface, should_escape_data_bytes_when_sending)
     0x04,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0x45;
   packet->payload[0] = 0xE1;
   when_packet_is_sent(packet);
@@ -939,7 +939,7 @@ TEST(tiny_gea2_interface, should_escape_crc_lsb_when_sending)
     0xE1,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0x45;
   packet->payload[0] = 0xA0;
   when_packet_is_sent(packet);
@@ -960,7 +960,7 @@ TEST(tiny_gea2_interface, should_escape_crc_msb_when_sending)
     0x4F,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0x45;
   packet->payload[0] = 0xC8;
   when_packet_is_sent(packet);
@@ -980,7 +980,7 @@ TEST(tiny_gea2_interface, should_allow_packets_to_be_forwarded)
     0x06,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->source = 0x32;
   packet->destination = 0x45;
   packet->payload[0] = 0xD5;
@@ -1007,7 +1007,7 @@ TEST(tiny_gea2_interface, should_forward_a_packet_with_max_payload_given_send_bu
     0xD5,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 7);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 7);
   packet->source = address;
   packet->destination = 0x45;
   packet->payload[0] = 0x00;
@@ -1024,7 +1024,7 @@ TEST(tiny_gea2_interface, should_not_forward_packets_that_are_too_large_to_be_bu
 {
   given_uart_echoing_is_enabled();
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 8);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 8);
 
   when_packet_is_forwarded(packet);
 }
@@ -1044,7 +1044,7 @@ TEST(tiny_gea2_interface, should_wait_until_the_idle_cool_down_time_has_expired_
   given_the_module_is_in_cooldown_after_receiving_a_message();
 
   nothing_should_happen();
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
   when_packet_is_sent(packet);
 
@@ -1054,7 +1054,7 @@ TEST(tiny_gea2_interface, should_wait_until_the_idle_cool_down_time_has_expired_
 TEST(tiny_gea2_interface, should_retry_sending_when_the_reflection_timeout_violation_occurs_and_stop_after_retries_are_exhausted)
 {
   should_send_bytes_via_uart(tiny_gea_stx);
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
   when_packet_is_sent(packet);
 
@@ -1087,7 +1087,7 @@ TEST(tiny_gea2_interface, should_retry_sending_when_the_reflection_timeout_viola
 TEST(tiny_gea2_interface, should_raise_reflection_timed_out_diagnostics_event_when_a_reflection_timeout_retry_sending_when_the_reflection_timeout_violation_occurs_and_stop_after_retrries_are_exhausted)
 {
   should_send_bytes_via_uart(tiny_gea_stx);
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
   when_packet_is_sent(packet);
 
@@ -1097,7 +1097,7 @@ TEST(tiny_gea2_interface, should_raise_reflection_timed_out_diagnostics_event_wh
 TEST(tiny_gea2_interface, should_retry_sending_when_a_collision_occurs_and_stop_after_retries_are_exhausted)
 {
   should_send_bytes_via_uart(tiny_gea_stx);
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
   when_packet_is_sent(packet);
 
@@ -1127,7 +1127,7 @@ TEST(tiny_gea2_interface, should_retry_sending_when_a_collision_occurs_and_stop_
   given_that_retries_have_been_set_to(1);
 
   should_send_bytes_via_uart(tiny_gea_stx);
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
   when_packet_is_sent(packet);
 
@@ -1172,11 +1172,11 @@ TEST(tiny_gea2_interface, should_stop_sending_when_an_unexpected_byte_is_receive
 TEST(tiny_gea2_interface, should_ignore_send_requests_when_already_sending)
 {
   should_send_bytes_via_uart(tiny_gea_stx);
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
   when_packet_is_sent(packet);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(differentPacket, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(differentPacket, 0);
   packet->destination = 0x80;
   when_packet_is_sent(differentPacket);
 
@@ -1196,7 +1196,7 @@ TEST(tiny_gea2_interface, should_retry_a_message_if_no_ack_is_received)
     0x39,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
   when_packet_is_sent(packet);
 
@@ -1250,7 +1250,7 @@ TEST(tiny_gea2_interface, should_successfully_receive_a_packet_while_in_collisio
     0x8F,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = address;
   packet->source = 0x45;
   packet_should_be_received(packet);
@@ -1280,7 +1280,7 @@ TEST(tiny_gea2_interface, should_restart_idle_timeout_when_byte_traffic_occurs)
   given_the_module_is_in_idle_cooldown();
 
   nothing_should_happen();
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
   when_packet_is_sent(packet);
 
@@ -1317,7 +1317,7 @@ TEST(tiny_gea2_interface, should_not_start_receiving_a_packet_while_a_received_p
     0x4B,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = address;
   packet->source = 0x45;
   packet_should_be_received(packet);
@@ -1330,7 +1330,7 @@ TEST(tiny_gea2_interface, should_handle_a_failure_to_send_during_an_escape)
     tiny_gea_stx,
     0xE0);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0xE1;
   when_packet_is_sent(packet);
 
@@ -1361,7 +1361,7 @@ TEST(tiny_gea2_interface, should_enter_idle_cooldown_when_a_non_stx_byte_is_rece
   after_bytes_are_received_via_uart(tiny_gea_stx - 1);
 
   nothing_should_happen();
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
   when_packet_is_sent(packet);
 
@@ -1396,7 +1396,7 @@ TEST(tiny_gea2_interface, should_receive_packets_addressed_to_other_nodes_when_i
     0xD1,
     tiny_gea_etx);
 
-  tiny_gea3_STATIC_ALLOC_PACKET(packet, 1);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = address + 1;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;

@@ -244,7 +244,7 @@ TEST_GROUP(tiny_erd_client)
 
 #define a_read_request_should_be_sent(request_id, address, erd)   \
   do {                                                            \
-    tiny_gea3_STATIC_ALLOC_PACKET(request, 4);                    \
+    tiny_gea_STATIC_ALLOC_PACKET(request, 4);                     \
     request->source = endpoint_address;                           \
     request->destination = address;                               \
     request->payload[0] = tiny_gea3_erd_api_command_read_request; \
@@ -257,7 +257,7 @@ TEST_GROUP(tiny_erd_client)
 #define a_write_request_should_be_sent(request_id, address, erd, data) \
   do {                                                                 \
     if(sizeof(data) == 1) {                                            \
-      tiny_gea3_STATIC_ALLOC_PACKET(request, 6);                       \
+      tiny_gea_STATIC_ALLOC_PACKET(request, 6);                        \
       request->source = endpoint_address;                              \
       request->destination = address;                                  \
       request->payload[0] = tiny_gea3_erd_api_command_write_request;   \
@@ -269,7 +269,7 @@ TEST_GROUP(tiny_erd_client)
       should_be_sent(request);                                         \
     }                                                                  \
     else {                                                             \
-      tiny_gea3_STATIC_ALLOC_PACKET(request, 7);                       \
+      tiny_gea_STATIC_ALLOC_PACKET(request, 7);                        \
       request->source = endpoint_address;                              \
       request->destination = address;                                  \
       request->payload[0] = tiny_gea3_erd_api_command_write_request;   \
@@ -285,7 +285,7 @@ TEST_GROUP(tiny_erd_client)
 
 #define a_subscribe_all_request_should_be_sent(request_id, address, retain)                                                                                          \
   do {                                                                                                                                                               \
-    tiny_gea3_STATIC_ALLOC_PACKET(request, 3);                                                                                                                       \
+    tiny_gea_STATIC_ALLOC_PACKET(request, 3);                                                                                                                        \
     request->source = endpoint_address;                                                                                                                              \
     request->destination = address;                                                                                                                                  \
     request->payload[0] = tiny_gea3_erd_api_command_subscribe_all_request;                                                                                           \
@@ -296,7 +296,7 @@ TEST_GROUP(tiny_erd_client)
 
 #define a_subscription_publication_acknowledgment_should_be_sent(request_id, address, context) \
   do {                                                                                         \
-    tiny_gea3_STATIC_ALLOC_PACKET(request, 3);                                                 \
+    tiny_gea_STATIC_ALLOC_PACKET(request, 3);                                                  \
     request->source = endpoint_address;                                                        \
     request->destination = address;                                                            \
     request->payload[0] = tiny_gea3_erd_api_command_publication_acknowledgment;                \
