@@ -88,16 +88,12 @@ void tiny_gea2_interface_init(
   uint8_t* send_buffer,
   uint8_t send_buffer_size,
   uint8_t address,
-  bool ignore_destination_address);
+  bool ignore_destination_address,
+  uint8_t retries);
 
 /*!
  * Run the interface and publish received packets.
  */
 void tiny_gea2_interface_run(tiny_gea2_interface_t* instance);
-
-/*!
- * Set the retries to a custom amount
- */
-void tiny_gea2_interface_set_retries(tiny_gea2_interface_t* instance, uint8_t retries);
 
 #endif

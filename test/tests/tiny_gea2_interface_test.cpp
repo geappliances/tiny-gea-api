@@ -28,7 +28,7 @@ enum {
   gea2_reflection_timeout_msec = 6,
   tiny_gea3_ack_timeout_msec = 8,
   gea2_broadcast_mask = 1,
-  default_retries = 5,
+  default_retries = 2,
   gea2_packet_transmission_overhead = 3,
   gea2_interbyte_timeout_msec = 6,
 
@@ -61,7 +61,8 @@ TEST_GROUP(tiny_gea2_interface)
       send_buffer,
       send_buffer_size,
       address,
-      false);
+      false,
+      default_retries);
 
     tiny_event_subscription_init(&receiveSubscription, NULL, packet_received);
     tiny_event_subscribe(tiny_gea3_interface_on_receive(&instance.interface), &receiveSubscription);
@@ -79,14 +80,26 @@ TEST_GROUP(tiny_gea2_interface)
       send_buffer,
       send_buffer_size,
       address,
-      true);
+      true,
+      default_retries);
 
     tiny_event_subscribe(tiny_gea3_interface_on_receive(&instance.interface), &receiveSubscription);
   }
 
   void given_that_retries_have_been_set_to(uint8_t retries)
   {
-    tiny_gea2_interface_set_retries(&instance, retries);
+    tiny_gea2_interface_init(
+      &instance,
+      &uart.interface,
+      &time_source.interface,
+      &msec_interrupt.interface,
+      receive_buffer,
+      receive_buffer_size,
+      send_buffer,
+      send_buffer_size,
+      address,
+      false,
+      retries);
   }
 
   static void packet_received(void*, const void* _args)

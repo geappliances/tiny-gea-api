@@ -599,7 +599,8 @@ void tiny_gea2_interface_init(
   uint8_t* send_buffer,
   uint8_t send_buffer_size,
   uint8_t address,
-  bool ignore_destination_address)
+  bool ignore_destination_address,
+  uint8_t retries)
 {
   instance->interface.api = &api;
   instance->_private.uart = uart;
@@ -614,6 +615,7 @@ void tiny_gea2_interface_init(
   instance->_private.send.buffer_size = send_buffer_size;
   instance->_private.send.active = false;
   instance->_private.send.packet_queued_in_background = false;
+  instance->_private.retries = retries;
 
   tiny_timer_group_init(&instance->_private.timer_group, time_source);
 
@@ -638,9 +640,4 @@ void tiny_gea2_interface_run(self_t* instance)
     tiny_event_publish(&instance->_private.on_receive, &args);
     instance->_private.receive.packet_ready = false;
   }
-}
-
-void tiny_gea2_interface_set_retries(tiny_gea2_interface_t* instance, uint8_t retries)
-{
-  instance->_private.retries = retries;
 }
