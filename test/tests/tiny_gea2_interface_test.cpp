@@ -7,7 +7,7 @@
 
 extern "C" {
 #include <string.h>
-#include "tiny_gea2_single_wire_interface.h"
+#include "tiny_gea2_interface.h"
 #include "tiny_gea3_constants.h"
 #include "tiny_gea3_interface.h"
 #include "tiny_gea3_packet.h"
@@ -28,7 +28,7 @@ enum {
   idle_cooldown_msec = 10 + (address & 0x1F),
   gea2_reflection_timeout_msec = 6,
   tiny_gea3_ack_timeout_msec = 8,
-  gea2_broadcast_mask = 1, // IDK WHAT THIS IS BUT FIX IT
+  gea2_broadcast_mask = 1,
   default_retries = 5,
   gea2_packet_transmission_overhead = 3,
   gea2_interbyte_timeout_msec = 6,
@@ -40,14 +40,14 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
   tiny_gea2_interface_single_wire_t instance;
   tiny_uart_double_t uart;
   tiny_event_subscription_t receiveSubscription;
-  uint8_t sendBuffer[send_buffer_size];
+  uint8_t send_buffer[send_buffer_size];
   uint8_t receive_buffer[receive_buffer_size];
   tiny_time_source_double_t time_source;
-  tiny_event_t msecInterrupt;
+  tiny_event_t msec_interrupt;
 
   void setup()
   {
-    tiny_event_init(&msecInterrupt);
+    tiny_event_init(&msec_interrupt);
 
     tiny_uart_double_init(&uart);
     tiny_time_source_double_init(&time_source);
@@ -56,10 +56,10 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
       &instance,
       &uart.interface,
       &time_source.interface,
-      &msecInterrupt.interface,
+      &msec_interrupt.interface,
       receive_buffer,
       receive_buffer_size,
-      sendBuffer,
+      send_buffer,
       send_buffer_size,
       address,
       false);
@@ -74,10 +74,10 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
       &instance,
       &uart.interface,
       &time_source.interface,
-      &msecInterrupt.interface,
+      &msec_interrupt.interface,
       receive_buffer,
       receive_buffer_size,
-      sendBuffer,
+      send_buffer,
       send_buffer_size,
       address,
       true);
@@ -333,12 +333,12 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
 
   tiny_time_source_ticks_t collision_timeout_msec()
   {
-    return 43 + (address & 0x1F) + ((78 ^ address) & 0x1F);
+    return 43 + (address & 0x1F) + ((time_source.ticks ^ address) & 0x1F);
   }
 
   void after_msec_interrupt_fires()
   {
-    tiny_event_publish(&msecInterrupt, NULL);
+    tiny_event_publish(&msec_interrupt, NULL);
   }
 };
 
@@ -766,7 +766,7 @@ TEST(tiny_gea2_interface_single_wire, should_reject_packets_that_violate_the_int
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, ShouldNotReceiveAPacketInIdleIfThePacketDoesNotStartWithStx)
+TEST(tiny_gea2_interface_single_wire, should_not_receive_a_packet_in_idle_if_the_packet_does_not_start_with_stx)
 {
   nothing_should_happen();
   after_bytes_are_received_via_uart(
@@ -779,7 +779,7 @@ TEST(tiny_gea2_interface_single_wire, ShouldNotReceiveAPacketInIdleIfThePacketDo
     tiny_gea3_etx);
 }
 
-TEST(tiny_gea2_interface_single_wire, ShouldNotReceiveAPacketInIdleCooldownIfThePacketDoesNotStartWithStx)
+TEST(tiny_gea2_interface_single_wire, should_not_receive_a_packet_in_idle_cooldown_if_the_packet_does_not_start_with_stx)
 {
   given_the_module_is_in_cooldown_after_receiving_a_message();
 

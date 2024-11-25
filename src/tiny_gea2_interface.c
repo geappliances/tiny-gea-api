@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include "tiny_crc16.h"
 #include "tiny_fsm.h"
-#include "tiny_gea2_single_wire_interface.h"
+#include "tiny_gea2_interface.h"
 #include "tiny_gea3_constants.h"
 #include "tiny_gea3_interface.h"
 #include "tiny_gea3_packet.h"
@@ -116,15 +116,15 @@ static void reflection_timeout(void* context)
   tiny_fsm_send_signal(&instance->_private.fsm, signal_reflection_timeout, NULL);
 }
 
-static bool determine_byte_to_send_considering_escapes(self_t* instance, uint8_t byte, uint8_t* byteTosend)
+static bool determine_byte_to_send_considering_escapes(self_t* instance, uint8_t byte, uint8_t* byte_to_send)
 {
   if(!instance->_private.send.escaped && needs_escape(byte)) {
     instance->_private.send.escaped = true;
-    *byteTosend = tiny_gea3_esc;
+    *byte_to_send = tiny_gea3_esc;
   }
   else {
     instance->_private.send.escaped = false;
-    *byteTosend = byte;
+    *byte_to_send = byte;
   }
 
   return !instance->_private.send.escaped;
@@ -132,7 +132,7 @@ static bool determine_byte_to_send_considering_escapes(self_t* instance, uint8_t
 
 static void send_next_byte(self_t* instance)
 {
-  uint8_t byteTosend = 0;
+  uint8_t byte_to_send = 0;
 
   tiny_timer_start(
     &instance->_private.timer_group,
@@ -143,43 +143,43 @@ static void send_next_byte(self_t* instance)
 
   switch(instance->_private.send.state) {
     case send_state_stx:
-      byteTosend = tiny_gea3_stx;
+      byte_to_send = tiny_gea3_stx;
       instance->_private.send.state = send_state_data;
       break;
 
     case send_state_data:
-      if(determine_byte_to_send_considering_escapes(instance, instance->_private.send.buffer[instance->_private.send.offset], &byteTosend)) {
-        reinterpret(sendPacket, instance->_private.send.buffer, const send_packet_t*);
+      if(determine_byte_to_send_considering_escapes(instance, instance->_private.send.buffer[instance->_private.send.offset], &byte_to_send)) {
+        reinterpret(send_packet, instance->_private.send.buffer, const send_packet_t*);
         instance->_private.send.offset++;
 
-        if(instance->_private.send.offset >= sendPacket->data_length - data_length_bytes_not_included_in_data) {
+        if(instance->_private.send.offset >= send_packet->data_length - data_length_bytes_not_included_in_data) {
           instance->_private.send.state = send_state_crc_msb;
         }
       }
       break;
 
     case send_state_crc_msb:
-      byteTosend = instance->_private.send.crc >> 8;
-      if(determine_byte_to_send_considering_escapes(instance, byteTosend, &byteTosend)) {
+      byte_to_send = instance->_private.send.crc >> 8;
+      if(determine_byte_to_send_considering_escapes(instance, byte_to_send, &byte_to_send)) {
         instance->_private.send.state = send_state_crc_lsb;
       }
       break;
 
     case send_state_crc_lsb:
-      byteTosend = instance->_private.send.crc;
-      if(determine_byte_to_send_considering_escapes(instance, byteTosend, &byteTosend)) {
+      byte_to_send = instance->_private.send.crc;
+      if(determine_byte_to_send_considering_escapes(instance, byte_to_send, &byte_to_send)) {
         instance->_private.send.state = send_state_etx;
       }
       break;
 
     case send_state_etx:
-      byteTosend = tiny_gea3_etx;
+      byte_to_send = tiny_gea3_etx;
       instance->_private.send.state = send_state_done;
       break;
   }
 
-  instance->_private.send.expected_reflection = byteTosend;
-  tiny_uart_send(instance->_private.uart, byteTosend);
+  instance->_private.send.expected_reflection = byte_to_send;
+  tiny_uart_send(instance->_private.uart, byte_to_send);
 }
 
 static void handle_send_failure(self_t* instance)
@@ -211,9 +211,9 @@ static void state_send(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const vo
       reinterpret(byte, data, const uint8_t*);
       if(*byte == instance->_private.send.expected_reflection) {
         if(instance->_private.send.state == send_state_done) {
-          send_packet_t* sendPacket = (send_packet_t*)instance->_private.send.buffer;
+          send_packet_t* send_packet = (send_packet_t*)instance->_private.send.buffer;
 
-          if(is_broadcast_address(sendPacket->destination)) {
+          if(is_broadcast_address(send_packet->destination)) {
             instance->_private.send.active = false;
             tiny_fsm_transition(fsm, state_idle_cooldown);
           }
@@ -376,10 +376,9 @@ static void process_received_byte(self_t* instance, const uint8_t byte)
   }
 }
 
-static tiny_timer_ticks_t get_collision_timeout(uint8_t address, uint8_t pseudoRandomNumber)
+static tiny_timer_ticks_t get_collision_timeout(uint8_t address, uint8_t pseudo_random_number)
 {
-  (void)pseudoRandomNumber;
-  return 43 + (address & 0x1F) + ((78 ^ address) & 0x1F);
+  return 43 + (address & 0x1F) + ((pseudo_random_number ^ address) & 0x1F);
 }
 
 static void collision_idle_timeout(void* context)
@@ -390,13 +389,13 @@ static void collision_idle_timeout(void* context)
 
 static void start_collision_idle_timeout_timer(self_t* instance)
 {
-  uint8_t currentTicks = (uint8_t)tiny_time_source_ticks(instance->_private.timer_group.time_source);
-  tiny_timer_ticks_t collisionTimeoutTicks = get_collision_timeout(instance->_private.address, currentTicks);
+  uint8_t current_ticks = (uint8_t)tiny_time_source_ticks(instance->_private.timer_group.time_source);
+  tiny_timer_ticks_t collision_timeout_ticks = get_collision_timeout(instance->_private.address, current_ticks);
 
   tiny_timer_start(
     &instance->_private.timer_group,
     &instance->_private.timer,
-    collisionTimeoutTicks,
+    collision_timeout_ticks,
     instance,
     collision_idle_timeout);
 }
@@ -468,7 +467,7 @@ static void idle_cooldown_timeout(void* context)
   tiny_fsm_send_signal(&instance->_private.fsm, signal_idle_cooldown_timeout, NULL);
 }
 
-static tiny_timer_ticks_t GetIdleTimeout(uint8_t address)
+static tiny_timer_ticks_t get_idle_timeout(uint8_t address)
 {
   return 10 + (address & 0x1F);
 }
@@ -482,7 +481,7 @@ static void state_idle_cooldown(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal,
       tiny_timer_start(
         &instance->_private.timer_group,
         &instance->_private.timer,
-        GetIdleTimeout(instance->_private.address),
+        get_idle_timeout(instance->_private.address),
         instance,
         idle_cooldown_timeout);
       break;
@@ -507,9 +506,9 @@ static void state_idle_cooldown(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal,
 
 static void prepare_buffered_packet_for_transmission(self_t* instance)
 {
-  reinterpret(sendPacket, instance->_private.send.buffer, send_packet_t*);
-  sendPacket->data_length += tiny_gea3_packet_transmission_overhead;
-  instance->_private.send.crc = tiny_crc16_block(tiny_gea3_crc_seed, (uint8_t*)sendPacket, sendPacket->data_length - data_length_bytes_not_included_in_data);
+  reinterpret(send_packet, instance->_private.send.buffer, send_packet_t*);
+  send_packet->data_length += tiny_gea3_packet_transmission_overhead;
+  instance->_private.send.crc = tiny_crc16_block(tiny_gea3_crc_seed, (uint8_t*)send_packet, send_packet->data_length - data_length_bytes_not_included_in_data);
   instance->_private.send.state = send_state_stx;
   instance->_private.send.offset = 0;
 }
@@ -520,7 +519,7 @@ static bool send_worker(
   uint8_t payload_length,
   tiny_gea3_interface_send_callback_t callback,
   void* context,
-  bool setSourceAddress)
+  bool set_source_address)
 {
   reinterpret(instance, _instance, self_t*);
   if(instance->_private.send.active) {
@@ -531,15 +530,15 @@ static bool send_worker(
     return false;
   }
 
-  reinterpret(sendPacket, instance->_private.send.buffer, tiny_gea3_packet_t*);
-  sendPacket->payload_length = payload_length;
-  callback(context, sendPacket);
+  reinterpret(send_packet, instance->_private.send.buffer, tiny_gea3_packet_t*);
+  send_packet->payload_length = payload_length;
+  callback(context, send_packet);
 
-  if(setSourceAddress) {
-    sendPacket->source = instance->_private.address;
+  if(set_source_address) {
+    send_packet->source = instance->_private.address;
   }
 
-  sendPacket->destination = destination;
+  send_packet->destination = destination;
   prepare_buffered_packet_for_transmission(instance);
 
   instance->_private.send.retries = instance->_private.retries;
