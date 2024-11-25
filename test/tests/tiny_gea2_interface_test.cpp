@@ -1,7 +1,6 @@
 /*!
  * @file
  * @brief
- *
  */
 
 extern "C" {
