@@ -522,6 +522,7 @@ static bool send_worker(
   bool set_source_address)
 {
   self_t* instance = (self_t*)_instance;
+
   if(instance->_private.send.active) {
     return false;
   }
