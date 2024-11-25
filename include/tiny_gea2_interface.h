@@ -17,7 +17,6 @@
  *
  * Note: This module requires an interrupt event. This "interrupt" is an event
  * that needs to happen in the same context as the `on_receive`.
- *
  */
 
 #ifndef tiny_gea2_interface_h
