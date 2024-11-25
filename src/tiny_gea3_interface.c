@@ -215,7 +215,7 @@ static void populate_send_packet(
 }
 
 static bool send_worker(
-  i_tiny_gea3_interface_t* _self,
+  i_tiny_gea_interface_t* _self,
   uint8_t destination,
   uint8_t payload_length,
   tiny_gea3_interface_send_callback_t callback,
@@ -247,7 +247,7 @@ static bool send_worker(
 }
 
 static bool send(
-  i_tiny_gea3_interface_t* _self,
+  i_tiny_gea_interface_t* _self,
   uint8_t destination,
   uint8_t payload_length,
   tiny_gea3_interface_send_callback_t callback,
@@ -257,7 +257,7 @@ static bool send(
 }
 
 static bool forward(
-  i_tiny_gea3_interface_t* _self,
+  i_tiny_gea_interface_t* _self,
   uint8_t destination,
   uint8_t payload_length,
   tiny_gea3_interface_send_callback_t callback,
@@ -266,13 +266,13 @@ static bool forward(
   return send_worker(_self, destination, payload_length, callback, context, false);
 }
 
-static i_tiny_event_t* on_receive(i_tiny_gea3_interface_t* _self)
+static i_tiny_event_t* on_receive(i_tiny_gea_interface_t* _self)
 {
   reinterpret(self, _self, self_t*);
   return &self->on_receive.interface;
 }
 
-static const i_tiny_gea3_interface_api_t api = { send, forward, on_receive };
+static const i_tiny_gea_interface_api_t api = { send, forward, on_receive };
 
 void tiny_gea3_interface_init(
   tiny_gea3_interface_t* self,

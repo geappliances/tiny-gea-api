@@ -884,7 +884,7 @@ static const i_tiny_erd_client_api_t api = { read, write, subscribe, retain_subs
 void tiny_erd_client_init(
   tiny_erd_client_t* self,
   tiny_timer_group_t* timer_group,
-  i_tiny_gea3_interface_t* gea3_interface,
+  i_tiny_gea_interface_t* gea3_interface,
   uint8_t* queue_buffer,
   size_t queue_buffer_size,
   const tiny_erd_client_configuration_t* configuration)

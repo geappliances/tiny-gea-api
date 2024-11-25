@@ -7,7 +7,7 @@
 #define tiny_erd_client_h
 
 #include "i_tiny_erd_client.h"
-#include "i_tiny_gea3_interface.h"
+#include "i_tiny_gea_interface.h"
 #include "tiny_event.h"
 #include "tiny_queue.h"
 #include "tiny_ring_buffer.h"
@@ -23,7 +23,7 @@ typedef struct {
 
   tiny_event_subscription_t packet_received;
   tiny_queue_t request_queue;
-  i_tiny_gea3_interface_t* gea3_interface;
+  i_tiny_gea_interface_t* gea3_interface;
   tiny_timer_group_t* timer_group;
   tiny_timer_t request_retry_timer;
   tiny_event_t on_activity;
@@ -40,7 +40,7 @@ typedef struct {
 void tiny_erd_client_init(
   tiny_erd_client_t* self,
   tiny_timer_group_t* timer_group,
-  i_tiny_gea3_interface_t* gea3_interface,
+  i_tiny_gea_interface_t* gea3_interface,
   uint8_t* queue_buffer,
   size_t queue_buffer_size,
   const tiny_erd_client_configuration_t* configuration);

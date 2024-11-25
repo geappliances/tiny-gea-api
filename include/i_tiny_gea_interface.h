@@ -6,8 +6,8 @@
  * the last send has been completed then the last send will be interrupted.
  */
 
-#ifndef i_tiny_gea3_interface_h
-#define i_tiny_gea3_interface_h
+#ifndef i_tiny_gea_interface_h
+#define i_tiny_gea_interface_h
 
 #include <stdbool.h>
 #include "i_tiny_event.h"
@@ -19,29 +19,29 @@ typedef struct {
 
 typedef void (*tiny_gea3_interface_send_callback_t)(void* context, tiny_gea3_packet_t* packet);
 
-struct i_tiny_gea3_interface_api_t;
+struct i_tiny_gea_interface_api_t;
 
 typedef struct {
-  const struct i_tiny_gea3_interface_api_t* api;
-} i_tiny_gea3_interface_t;
+  const struct i_tiny_gea_interface_api_t* api;
+} i_tiny_gea_interface_t;
 
-typedef struct i_tiny_gea3_interface_api_t {
+typedef struct i_tiny_gea_interface_api_t {
   bool (*send)(
-    i_tiny_gea3_interface_t* self,
+    i_tiny_gea_interface_t* self,
     uint8_t destination,
     uint8_t payload_length,
     tiny_gea3_interface_send_callback_t callback,
     void* context);
 
   bool (*forward)(
-    i_tiny_gea3_interface_t* self,
+    i_tiny_gea_interface_t* self,
     uint8_t destination,
     uint8_t payload_length,
     tiny_gea3_interface_send_callback_t callback,
     void* context);
 
-  i_tiny_event_t* (*on_receive)(i_tiny_gea3_interface_t* self);
-} i_tiny_gea3_interface_api_t;
+  i_tiny_event_t* (*on_receive)(i_tiny_gea_interface_t* self);
+} i_tiny_gea_interface_api_t;
 
 /*!
  * Send a packet by getting direct access to the internal send buffer (given to
@@ -51,7 +51,7 @@ typedef struct i_tiny_gea3_interface_api_t {
  * or activity.
  */
 static inline bool tiny_gea3_interface_send(
-  i_tiny_gea3_interface_t* self,
+  i_tiny_gea_interface_t* self,
   uint8_t destination,
   uint8_t payload_length,
   tiny_gea3_interface_send_callback_t callback,
@@ -64,7 +64,7 @@ static inline bool tiny_gea3_interface_send(
  * Send a packet without setting source address
  */
 static inline bool tiny_gea3_interface_forward(
-  i_tiny_gea3_interface_t* self,
+  i_tiny_gea_interface_t* self,
   uint8_t destination,
   uint8_t payload_length,
   tiny_gea3_interface_send_callback_t callback,
@@ -76,7 +76,7 @@ static inline bool tiny_gea3_interface_forward(
 /*!
  * Event raised when a packet is received.
  */
-static inline i_tiny_event_t* tiny_gea3_interface_on_receive(i_tiny_gea3_interface_t* self)
+static inline i_tiny_event_t* tiny_gea3_interface_on_receive(i_tiny_gea_interface_t* self)
 {
   return self->api->on_receive(self);
 }

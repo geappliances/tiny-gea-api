@@ -21,7 +21,7 @@
 #define TINYGEA2INTERFACE_SINGLEWIRE_H
 
 #include "hal/i_tiny_uart.h"
-#include "i_tiny_gea3_interface.h"
+#include "i_tiny_gea_interface.h"
 #include "i_tiny_time_source.h"
 #include "tiny_crc16.h"
 #include "tiny_event.h"
@@ -35,7 +35,7 @@ typedef struct
 
 typedef struct
 {
-  i_tiny_gea3_interface_t interface;
+  i_tiny_gea_interface_t interface;
 
   struct
   {
@@ -49,19 +49,19 @@ typedef struct
     uint8_t address;
     bool ignore_destination_address;
     uint8_t retries;
-    tiny_timer_group_t timerGroup;
+    tiny_timer_group_t timer_group;
 
     struct
     {
       uint8_t* buffer;
-      uint8_t bufferSize;
+      uint8_t buffer_size;
       uint8_t state;
       uint8_t offset;
       uint16_t crc;
       bool escaped;
       volatile bool active;
-      volatile bool packetQueuedInBackground;
-      uint8_t expectedReflection;
+      volatile bool packet_queued_in_background;
+      uint8_t expected_reflection;
       uint8_t retries;
     } send;
 
@@ -69,10 +69,10 @@ typedef struct
     {
       uint8_t* buffer;
       uint16_t crc;
-      uint8_t bufferSize;
+      uint8_t buffer_size;
       uint8_t count;
       bool escaped;
-      volatile bool packetReady;
+      volatile bool packet_ready;
     } receive;
   } _private;
 } tiny_gea2_interface_single_wire_t;

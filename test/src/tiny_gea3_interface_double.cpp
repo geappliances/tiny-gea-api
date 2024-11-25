@@ -8,7 +8,7 @@
 #include "tiny_utils.h"
 
 static bool send(
-  i_tiny_gea3_interface_t* _self,
+  i_tiny_gea_interface_t* _self,
   uint8_t destination,
   uint8_t payload_length,
   tiny_gea3_interface_send_callback_t callback,
@@ -31,7 +31,7 @@ static bool send(
 }
 
 static bool forward(
-  i_tiny_gea3_interface_t* _self,
+  i_tiny_gea_interface_t* _self,
   uint8_t destination,
   uint8_t payload_length,
   tiny_gea3_interface_send_callback_t callback,
@@ -52,13 +52,13 @@ static bool forward(
   return true;
 }
 
-static i_tiny_event_t* on_receive(i_tiny_gea3_interface_t* _self)
+static i_tiny_event_t* on_receive(i_tiny_gea_interface_t* _self)
 {
   reinterpret(self, _self, tiny_gea3_interface_double_t*);
   return &self->on_receive.interface;
 }
 
-static const i_tiny_gea3_interface_api_t api = { send, forward, on_receive };
+static const i_tiny_gea_interface_api_t api = { send, forward, on_receive };
 
 void tiny_gea3_interface_double_init(tiny_gea3_interface_double_t* self, uint8_t address)
 {

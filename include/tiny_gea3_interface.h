@@ -17,12 +17,12 @@
 
 #include <stdint.h>
 #include "hal/i_tiny_uart.h"
-#include "i_tiny_gea3_interface.h"
+#include "i_tiny_gea_interface.h"
 #include "tiny_event.h"
 #include "tiny_queue.h"
 
 typedef struct {
-  i_tiny_gea3_interface_t interface;
+  i_tiny_gea_interface_t interface;
 
   tiny_event_t on_receive;
   tiny_event_subscription_t byte_received_subscription;

@@ -831,7 +831,7 @@ TEST(tiny_gea2_interface_single_wire, should_send_a_packet_with_a_payload)
   when_packet_is_sent(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, ShouldsendAPacketWithMaxPayloadGivensend_buffer_size)
+TEST(tiny_gea2_interface_single_wire, should_send_a_packet_with_max_payload_given_send_buffer_size)
 {
   given_uart_echoing_is_enabled();
 
@@ -863,7 +863,7 @@ TEST(tiny_gea2_interface_single_wire, ShouldsendAPacketWithMaxPayloadGivensend_b
   when_packet_is_sent(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, ShouldRaiseAPacketSentEventWhenAPacketIsSent)
+TEST(tiny_gea2_interface_single_wire, should_raise_a_packet_sent_event_when_a_packet_is_sent)
 {
   given_uart_echoing_is_enabled();
 
@@ -1281,7 +1281,7 @@ TEST(tiny_gea2_interface_single_wire, should_restart_idle_timeout_when_byte_traf
   after(1);
 }
 
-TEST(tiny_gea2_interface_single_wire, ShouldNotStartReceivingAPacketWhileAReceivedPacketIsReady)
+TEST(tiny_gea2_interface_single_wire, should_not_start_receiving_a_packet_while_a_received_packet_is_ready)
 {
   given_uart_echoing_is_enabled();
 

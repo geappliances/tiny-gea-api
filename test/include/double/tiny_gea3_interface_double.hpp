@@ -8,12 +8,12 @@
 
 extern "C" {
 #include <stdint.h>
-#include "i_tiny_gea3_interface.h"
+#include "i_tiny_gea_interface.h"
 #include "tiny_event.h"
 };
 
 typedef struct {
-  i_tiny_gea3_interface_t interface;
+  i_tiny_gea_interface_t interface;
 
   uint8_t address;
   tiny_event_t on_receive;
