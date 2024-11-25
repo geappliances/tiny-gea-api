@@ -35,9 +35,9 @@ enum {
 
 };
 
-TEST_GROUP(tiny_gea2_interface_single_wire)
+TEST_GROUP(tiny_gea2_interface)
 {
-  tiny_gea2_interface_single_wire_t instance;
+  tiny_gea2_interface_t instance;
   tiny_uart_double_t uart;
   tiny_event_subscription_t receiveSubscription;
   uint8_t send_buffer[send_buffer_size];
@@ -52,7 +52,7 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
     tiny_uart_double_init(&uart);
     tiny_time_source_double_init(&time_source);
 
-    tiny_gea2_interface_single_wire_init(
+    tiny_gea2_interface_init(
       &instance,
       &uart.interface,
       &time_source.interface,
@@ -70,7 +70,7 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
 
   void given_that_ignore_destination_address_is_enabled()
   {
-    tiny_gea2_interface_single_wire_init(
+    tiny_gea2_interface_init(
       &instance,
       &uart.interface,
       &time_source.interface,
@@ -87,7 +87,7 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
 
   void given_that_retries_have_been_set_to(uint8_t retries)
   {
-    tiny_gea2_interface_single_wire_set_retries(&instance, retries);
+    tiny_gea2_interface_set_retries(&instance, retries);
   }
 
   static void packet_received(void*, const void* _args)
@@ -151,7 +151,7 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
 
   void after_the_interface_is_run()
   {
-    tiny_gea2_interface_single_wire_run(&instance);
+    tiny_gea2_interface_run(&instance);
   }
 
   void nothing_should_happen()
@@ -342,7 +342,7 @@ TEST_GROUP(tiny_gea2_interface_single_wire)
   }
 };
 
-TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_with_no_payload_and_send_an_ack)
+TEST(tiny_gea2_interface, should_receive_a_packet_with_no_payload_and_send_an_ack)
 {
   ack_should_be_sent();
   after_bytes_are_received_via_uart(
@@ -361,7 +361,7 @@ TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_with_no_payload_an
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_with_a_payload)
+TEST(tiny_gea2_interface, should_receive_a_packet_with_a_payload)
 {
   ack_should_be_sent();
   after_bytes_are_received_via_uart(
@@ -382,7 +382,7 @@ TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_with_a_payload)
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_with_maximum_payload)
+TEST(tiny_gea2_interface, should_receive_a_packet_with_maximum_payload)
 {
   ack_should_be_sent();
   after_bytes_are_received_via_uart(
@@ -409,7 +409,7 @@ TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_with_maximum_paylo
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_raise_packet_received_diagnostics_event_when_a_packet_is_received)
+TEST(tiny_gea2_interface, should_raise_packet_received_diagnostics_event_when_a_packet_is_received)
 {
   ack_should_be_sent();
   after_bytes_are_received_via_uart(
@@ -423,7 +423,7 @@ TEST(tiny_gea2_interface_single_wire, should_raise_packet_received_diagnostics_e
     tiny_gea3_etx);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_drop_packets_with_payloads_that_are_too_large)
+TEST(tiny_gea2_interface, should_drop_packets_with_payloads_that_are_too_large)
 {
   after_bytes_are_received_via_uart(
     tiny_gea3_stx,
@@ -443,7 +443,7 @@ TEST(tiny_gea2_interface_single_wire, should_drop_packets_with_payloads_that_are
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_with_escapes)
+TEST(tiny_gea2_interface, should_receive_a_packet_with_escapes)
 {
   ack_should_be_sent();
   after_bytes_are_received_via_uart(
@@ -474,7 +474,7 @@ TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_with_escapes)
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_receive_broadcast_packets)
+TEST(tiny_gea2_interface, should_receive_broadcast_packets)
 {
   after_bytes_are_received_via_uart(
     tiny_gea3_stx,
@@ -494,7 +494,7 @@ TEST(tiny_gea2_interface_single_wire, should_receive_broadcast_packets)
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_receive_product_line_specific_broadcast_packets)
+TEST(tiny_gea2_interface, should_receive_product_line_specific_broadcast_packets)
 {
   after_bytes_are_received_via_uart(
     tiny_gea3_stx,
@@ -514,7 +514,7 @@ TEST(tiny_gea2_interface_single_wire, should_receive_product_line_specific_broad
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_drop_packets_addressed_to_other_nodes)
+TEST(tiny_gea2_interface, should_drop_packets_addressed_to_other_nodes)
 {
   after_bytes_are_received_via_uart(
     tiny_gea3_stx,
@@ -530,7 +530,7 @@ TEST(tiny_gea2_interface_single_wire, should_drop_packets_addressed_to_other_nod
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_receive_multiple_packets)
+TEST(tiny_gea2_interface, should_receive_multiple_packets)
 {
   {
     ack_should_be_sent();
@@ -571,7 +571,7 @@ TEST(tiny_gea2_interface_single_wire, should_receive_multiple_packets)
   }
 }
 
-TEST(tiny_gea2_interface_single_wire, should_drop_packets_with_invalid_crcs)
+TEST(tiny_gea2_interface, should_drop_packets_with_invalid_crcs)
 {
   after_bytes_are_received_via_uart(
     tiny_gea3_stx,
@@ -587,7 +587,7 @@ TEST(tiny_gea2_interface_single_wire, should_drop_packets_with_invalid_crcs)
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_drop_packets_with_invalid_length)
+TEST(tiny_gea2_interface, should_drop_packets_with_invalid_length)
 {
   after_bytes_are_received_via_uart(
     tiny_gea3_stx,
@@ -603,7 +603,7 @@ TEST(tiny_gea2_interface_single_wire, should_drop_packets_with_invalid_length)
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, ShouldDropPacketsThatAreTooSmall)
+TEST(tiny_gea2_interface, ShouldDropPacketsThatAreTooSmall)
 {
   after_bytes_are_received_via_uart(
     tiny_gea3_stx,
@@ -617,7 +617,7 @@ TEST(tiny_gea2_interface_single_wire, ShouldDropPacketsThatAreTooSmall)
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_drop_packets_received_before_publishing_a_previously_received_packet)
+TEST(tiny_gea2_interface, should_drop_packets_received_before_publishing_a_previously_received_packet)
 {
   ack_should_be_sent();
   after_bytes_are_received_via_uart(
@@ -648,7 +648,7 @@ TEST(tiny_gea2_interface_single_wire, should_drop_packets_received_before_publis
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_after_a_previous_packet_is_aborted)
+TEST(tiny_gea2_interface, should_receive_a_packet_after_a_previous_packet_is_aborted)
 {
   ack_should_be_sent();
   after_bytes_are_received_via_uart(
@@ -672,7 +672,7 @@ TEST(tiny_gea2_interface_single_wire, should_receive_a_packet_after_a_previous_p
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_drop_bytes_received_prior_to_stx)
+TEST(tiny_gea2_interface, should_drop_bytes_received_prior_to_stx)
 {
   ack_should_be_sent();
   after_bytes_are_received_via_uart(
@@ -694,7 +694,7 @@ TEST(tiny_gea2_interface_single_wire, should_drop_bytes_received_prior_to_stx)
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_not_publish_received_packets_prior_to_receiving_etx_received_before_the_interbyte_timeout)
+TEST(tiny_gea2_interface, should_not_publish_received_packets_prior_to_receiving_etx_received_before_the_interbyte_timeout)
 {
   after_bytes_are_received_via_uart(
     tiny_gea3_stx,
@@ -720,7 +720,7 @@ TEST(tiny_gea2_interface_single_wire, should_not_publish_received_packets_prior_
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_reject_packets_that_violate_the_interbyte_timeout)
+TEST(tiny_gea2_interface, should_reject_packets_that_violate_the_interbyte_timeout)
 {
   after_bytes_are_received_via_uart(
     tiny_gea3_stx,
@@ -743,7 +743,7 @@ TEST(tiny_gea2_interface_single_wire, should_reject_packets_that_violate_the_int
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_reject_packets_that_violate_the_interbyte_timeout_after_stx)
+TEST(tiny_gea2_interface, should_reject_packets_that_violate_the_interbyte_timeout_after_stx)
 {
   after_bytes_are_received_via_uart(tiny_gea3_stx);
 
@@ -766,7 +766,7 @@ TEST(tiny_gea2_interface_single_wire, should_reject_packets_that_violate_the_int
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_not_receive_a_packet_in_idle_if_the_packet_does_not_start_with_stx)
+TEST(tiny_gea2_interface, should_not_receive_a_packet_in_idle_if_the_packet_does_not_start_with_stx)
 {
   nothing_should_happen();
   after_bytes_are_received_via_uart(
@@ -779,7 +779,7 @@ TEST(tiny_gea2_interface_single_wire, should_not_receive_a_packet_in_idle_if_the
     tiny_gea3_etx);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_not_receive_a_packet_in_idle_cooldown_if_the_packet_does_not_start_with_stx)
+TEST(tiny_gea2_interface, should_not_receive_a_packet_in_idle_cooldown_if_the_packet_does_not_start_with_stx)
 {
   given_the_module_is_in_cooldown_after_receiving_a_message();
 
@@ -794,7 +794,7 @@ TEST(tiny_gea2_interface_single_wire, should_not_receive_a_packet_in_idle_cooldo
     tiny_gea3_etx);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_send_a_packet_with_no_payload)
+TEST(tiny_gea2_interface, should_send_a_packet_with_no_payload)
 {
   given_uart_echoing_is_enabled();
   should_send_bytes_via_uart(
@@ -811,7 +811,7 @@ TEST(tiny_gea2_interface_single_wire, should_send_a_packet_with_no_payload)
   when_packet_is_sent(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_send_a_packet_with_a_payload)
+TEST(tiny_gea2_interface, should_send_a_packet_with_a_payload)
 {
   given_uart_echoing_is_enabled();
 
@@ -831,7 +831,7 @@ TEST(tiny_gea2_interface_single_wire, should_send_a_packet_with_a_payload)
   when_packet_is_sent(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_send_a_packet_with_max_payload_given_send_buffer_size)
+TEST(tiny_gea2_interface, should_send_a_packet_with_max_payload_given_send_buffer_size)
 {
   given_uart_echoing_is_enabled();
 
@@ -863,7 +863,7 @@ TEST(tiny_gea2_interface_single_wire, should_send_a_packet_with_max_payload_give
   when_packet_is_sent(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_raise_a_packet_sent_event_when_a_packet_is_sent)
+TEST(tiny_gea2_interface, should_raise_a_packet_sent_event_when_a_packet_is_sent)
 {
   given_uart_echoing_is_enabled();
 
@@ -883,7 +883,7 @@ TEST(tiny_gea2_interface_single_wire, should_raise_a_packet_sent_event_when_a_pa
   when_packet_is_sent(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_not_send_a_packet_that_is_too_large_for_the_send_buffer)
+TEST(tiny_gea2_interface, should_not_send_a_packet_that_is_too_large_for_the_send_buffer)
 {
   given_uart_echoing_is_enabled();
 
@@ -892,7 +892,7 @@ TEST(tiny_gea2_interface_single_wire, should_not_send_a_packet_that_is_too_large
   when_packet_is_sent(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_escape_data_bytes_when_sending)
+TEST(tiny_gea2_interface, should_escape_data_bytes_when_sending)
 {
   given_uart_echoing_is_enabled();
 
@@ -913,7 +913,7 @@ TEST(tiny_gea2_interface_single_wire, should_escape_data_bytes_when_sending)
   when_packet_is_sent(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_escape_crc_lsb_when_sending)
+TEST(tiny_gea2_interface, should_escape_crc_lsb_when_sending)
 {
   given_uart_echoing_is_enabled();
 
@@ -934,7 +934,7 @@ TEST(tiny_gea2_interface_single_wire, should_escape_crc_lsb_when_sending)
   when_packet_is_sent(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_escape_crc_msb_when_sending)
+TEST(tiny_gea2_interface, should_escape_crc_msb_when_sending)
 {
   given_uart_echoing_is_enabled();
 
@@ -955,7 +955,7 @@ TEST(tiny_gea2_interface_single_wire, should_escape_crc_msb_when_sending)
   when_packet_is_sent(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_allow_packets_to_be_forwarded)
+TEST(tiny_gea2_interface, should_allow_packets_to_be_forwarded)
 {
   given_uart_echoing_is_enabled();
 
@@ -976,7 +976,7 @@ TEST(tiny_gea2_interface_single_wire, should_allow_packets_to_be_forwarded)
   when_packet_is_forwarded(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_forward_a_packet_with_max_payload_given_send_buffer_size)
+TEST(tiny_gea2_interface, should_forward_a_packet_with_max_payload_given_send_buffer_size)
 {
   given_uart_echoing_is_enabled();
 
@@ -1009,7 +1009,7 @@ TEST(tiny_gea2_interface_single_wire, should_forward_a_packet_with_max_payload_g
   when_packet_is_forwarded(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_not_forward_packets_that_are_too_large_to_be_buffered)
+TEST(tiny_gea2_interface, should_not_forward_packets_that_are_too_large_to_be_buffered)
 {
   given_uart_echoing_is_enabled();
 
@@ -1018,7 +1018,7 @@ TEST(tiny_gea2_interface_single_wire, should_not_forward_packets_that_are_too_la
   when_packet_is_forwarded(packet);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_be_able_to_send_back_broadcasts_without_an_ack)
+TEST(tiny_gea2_interface, should_be_able_to_send_back_broadcasts_without_an_ack)
 {
   given_uart_echoing_is_enabled();
 
@@ -1026,7 +1026,7 @@ TEST(tiny_gea2_interface_single_wire, should_be_able_to_send_back_broadcasts_wit
   should_be_able_to_send_a_message_after_idle_cooldown();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_wait_until_the_idle_cool_down_time_has_expired_before_sending_a_packet)
+TEST(tiny_gea2_interface, should_wait_until_the_idle_cool_down_time_has_expired_before_sending_a_packet)
 {
   given_uart_echoing_is_enabled();
 
@@ -1040,7 +1040,7 @@ TEST(tiny_gea2_interface_single_wire, should_wait_until_the_idle_cool_down_time_
   should_be_able_to_send_a_message_after_idle_cooldown();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_the_reflection_timeout_violation_occurs_and_stop_after_retries_are_exhausted)
+TEST(tiny_gea2_interface, should_retry_sending_when_the_reflection_timeout_violation_occurs_and_stop_after_retries_are_exhausted)
 {
   should_send_bytes_via_uart(tiny_gea3_stx);
   tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
@@ -1073,7 +1073,7 @@ TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_the_reflection_t
   should_be_able_to_send_a_message_after_idle_cooldown();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_raise_reflection_timed_out_diagnostics_event_when_a_reflection_timeout_retry_sending_when_the_reflection_timeout_violation_occurs_and_stop_after_retrries_are_exhausted)
+TEST(tiny_gea2_interface, should_raise_reflection_timed_out_diagnostics_event_when_a_reflection_timeout_retry_sending_when_the_reflection_timeout_violation_occurs_and_stop_after_retrries_are_exhausted)
 {
   should_send_bytes_via_uart(tiny_gea3_stx);
   tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
@@ -1083,7 +1083,7 @@ TEST(tiny_gea2_interface_single_wire, should_raise_reflection_timed_out_diagnost
   after(gea2_reflection_timeout_msec);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_a_collision_occurs_and_stop_after_retries_are_exhausted)
+TEST(tiny_gea2_interface, should_retry_sending_when_a_collision_occurs_and_stop_after_retries_are_exhausted)
 {
   should_send_bytes_via_uart(tiny_gea3_stx);
   tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
@@ -1111,7 +1111,7 @@ TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_a_collision_occu
   should_be_able_to_send_a_message_after_collision_cooldown();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_a_collision_occurs_and_stop_after_retries_are_exhausted_with_a_custom_retry_count)
+TEST(tiny_gea2_interface, should_retry_sending_when_a_collision_occurs_and_stop_after_retries_are_exhausted_with_a_custom_retry_count)
 {
   given_that_retries_have_been_set_to(1);
 
@@ -1133,7 +1133,7 @@ TEST(tiny_gea2_interface_single_wire, should_retry_sending_when_a_collision_occu
   should_be_able_to_send_a_message_after_collision_cooldown();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_stop_sending_when_an_unexpected_byte_is_received_while_waiting_for_an_ack)
+TEST(tiny_gea2_interface, should_stop_sending_when_an_unexpected_byte_is_received_while_waiting_for_an_ack)
 {
   gjven_that_a_packet_has_been_sent();
 
@@ -1158,7 +1158,7 @@ TEST(tiny_gea2_interface_single_wire, should_stop_sending_when_an_unexpected_byt
   should_be_able_to_send_a_message_after_collision_cooldown();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_ignore_send_requests_when_already_sending)
+TEST(tiny_gea2_interface, should_ignore_send_requests_when_already_sending)
 {
   should_send_bytes_via_uart(tiny_gea3_stx);
   tiny_gea3_STATIC_ALLOC_PACKET(packet, 0);
@@ -1173,7 +1173,7 @@ TEST(tiny_gea2_interface_single_wire, should_ignore_send_requests_when_already_s
   after_bytes_are_received_via_uart(tiny_gea3_stx);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_retry_a_message_if_no_ack_is_received)
+TEST(tiny_gea2_interface, should_retry_a_message_if_no_ack_is_received)
 {
   given_uart_echoing_is_enabled();
   should_send_bytes_via_uart(
@@ -1225,7 +1225,7 @@ TEST(tiny_gea2_interface_single_wire, should_retry_a_message_if_no_ack_is_receiv
   should_be_able_to_send_a_message_after_collision_cooldown();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_successfully_receive_a_packet_while_in_collision_cooldown)
+TEST(tiny_gea2_interface, should_successfully_receive_a_packet_while_in_collision_cooldown)
 {
   given_the_module_is_in_collision_cooldown();
 
@@ -1246,7 +1246,7 @@ TEST(tiny_gea2_interface_single_wire, should_successfully_receive_a_packet_while
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_not_receive_a_packet_while_in_collision_cooldown_that_does_not_start_with_stx)
+TEST(tiny_gea2_interface, should_not_receive_a_packet_while_in_collision_cooldown_that_does_not_start_with_stx)
 {
   given_the_module_is_in_collision_cooldown();
 
@@ -1262,7 +1262,7 @@ TEST(tiny_gea2_interface_single_wire, should_not_receive_a_packet_while_in_colli
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_restart_idle_timeout_when_byte_traffic_occurs)
+TEST(tiny_gea2_interface, should_restart_idle_timeout_when_byte_traffic_occurs)
 {
   given_uart_echoing_is_enabled();
 
@@ -1281,7 +1281,7 @@ TEST(tiny_gea2_interface_single_wire, should_restart_idle_timeout_when_byte_traf
   after(1);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_not_start_receiving_a_packet_while_a_received_packet_is_ready)
+TEST(tiny_gea2_interface, should_not_start_receiving_a_packet_while_a_received_packet_is_ready)
 {
   given_uart_echoing_is_enabled();
 
@@ -1313,7 +1313,7 @@ TEST(tiny_gea2_interface_single_wire, should_not_start_receiving_a_packet_while_
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface_single_wire, should_handle_a_failure_to_send_during_an_escape)
+TEST(tiny_gea2_interface, should_handle_a_failure_to_send_during_an_escape)
 {
   should_send_bytes_via_uart(
     tiny_gea3_stx,
@@ -1343,7 +1343,7 @@ TEST(tiny_gea2_interface_single_wire, should_handle_a_failure_to_send_during_an_
   after(1);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_enter_idle_cooldown_when_a_non_stx_byte_is_received_in_idle)
+TEST(tiny_gea2_interface, should_enter_idle_cooldown_when_a_non_stx_byte_is_received_in_idle)
 {
   given_uart_echoing_is_enabled();
 
@@ -1368,7 +1368,7 @@ TEST(tiny_gea2_interface_single_wire, should_enter_idle_cooldown_when_a_non_stx_
   after(1);
 }
 
-TEST(tiny_gea2_interface_single_wire, should_receive_packets_addressed_to_other_nodes_when_ignore_destination_address_is_enabled)
+TEST(tiny_gea2_interface, should_receive_packets_addressed_to_other_nodes_when_ignore_destination_address_is_enabled)
 {
   given_uart_echoing_is_enabled();
 

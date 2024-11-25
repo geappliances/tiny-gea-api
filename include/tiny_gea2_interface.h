@@ -4,7 +4,7 @@
  *
  * This component is interrupt-aware and handles byte transmit/receive in the
  * interrupt context. Publication of messages is done via a background task in
- * tiny_gea2_interface_single_wire_run() so the application does not have to do
+ * tiny_gea2_interface_run() so the application does not have to do
  * anything special.
  *
  * Additionally, this component does not do any queueing of packets. If a send
@@ -13,12 +13,12 @@
  * is currently sending and wait before attempting to send a packet.
  *
  * If a message is received, all messages received after will be dropped until
- * tiny_gea2_interface_single_wire_run() is called.
+ * tiny_gea2_interface_run() is called.
  * Copyright GE Appliances - Confidential - All rights reserved.
  */
 
-#ifndef TINYGEA2INTERFACE_SINGLEWIRE_H
-#define TINYGEA2INTERFACE_SINGLEWIRE_H
+#ifndef tiny_gea2_interface_h
+#define tiny_gea2_interface_h
 
 #include "hal/i_tiny_uart.h"
 #include "i_tiny_gea_interface.h"
@@ -75,7 +75,7 @@ typedef struct
       volatile bool packet_ready;
     } receive;
   } _private;
-} tiny_gea2_interface_single_wire_t;
+} tiny_gea2_interface_t;
 
 /*!
  * @param instance
@@ -90,8 +90,8 @@ typedef struct
  * @param address
  * @param ignore_destination_address Receives all valid packets when this is enabled to allow for routing or sniffing.
  */
-void tiny_gea2_interface_single_wire_init(
-  tiny_gea2_interface_single_wire_t* instance,
+void tiny_gea2_interface_init(
+  tiny_gea2_interface_t* instance,
   i_tiny_uart_t* uart,
   i_tiny_time_source_t* time_source,
   i_tiny_event_t* msec_interrupt,
@@ -106,12 +106,12 @@ void tiny_gea2_interface_single_wire_init(
  * Will emit received packets. Run this in the background context.
  * @param instance
  */
-void tiny_gea2_interface_single_wire_run(tiny_gea2_interface_single_wire_t* instance);
+void tiny_gea2_interface_run(tiny_gea2_interface_t* instance);
 
 /*!
  * @param instance
  * @param retries
  */
-void tiny_gea2_interface_single_wire_set_retries(tiny_gea2_interface_single_wire_t* instance, uint8_t retries);
+void tiny_gea2_interface_set_retries(tiny_gea2_interface_t* instance, uint8_t retries);
 
 #endif

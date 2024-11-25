@@ -20,7 +20,7 @@ enum {
   gea2_interbyte_timeout_msec = 6,
 };
 
-typedef tiny_gea2_interface_single_wire_t self_t;
+typedef tiny_gea2_interface_t self_t;
 
 // send packet should match tiny_gea3_packet_t, but stores data_length (per spec) instead of payload_length
 // (used application convenience)
@@ -589,7 +589,7 @@ static i_tiny_event_t* get_on_receive_event(i_tiny_gea_interface_t* _instance)
 
 static const i_tiny_gea_interface_api_t api = { send, forward, get_on_receive_event };
 
-void tiny_gea2_interface_single_wire_init(
+void tiny_gea2_interface_init(
   self_t* instance,
   i_tiny_uart_t* uart,
   i_tiny_time_source_t* time_source,
@@ -629,7 +629,7 @@ void tiny_gea2_interface_single_wire_init(
   tiny_fsm_init(&instance->_private.fsm, state_idle);
 }
 
-void tiny_gea2_interface_single_wire_run(self_t* instance)
+void tiny_gea2_interface_run(self_t* instance)
 {
   if(instance->_private.receive.packet_ready) {
     tiny_gea3_interface_on_receive_args_t args;
@@ -640,7 +640,7 @@ void tiny_gea2_interface_single_wire_run(self_t* instance)
   }
 }
 
-void tiny_gea2_interface_single_wire_set_retries(tiny_gea2_interface_single_wire_t* instance, uint8_t retries)
+void tiny_gea2_interface_set_retries(tiny_gea2_interface_t* instance, uint8_t retries)
 {
   instance->_private.retries = retries;
 }

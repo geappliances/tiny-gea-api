@@ -7,11 +7,11 @@ PlatformIO library for interacting with GE Appliances products supporting the fu
 ### `tiny_gea3_interface`
 Provides a simple interface for sending and receiving GEA3 serial packets.
 
+## `tiny_gea2_interface`
+Provides a simple interface for sending and receiving GEA2 serial packets on a half duplex setup.
+
 ### `tiny_erd_client`
 Provides a simple interface for reading and writing addressable data (ERDs) over a GEA3 serial interface.
-
-## `tiny_gea2_interface_single_wire`
-Provides a simple interface for sending and receiving GEA2 serial packets on a half duplex setup.
 
 ## Dev Environment
 1. Clone the repo
