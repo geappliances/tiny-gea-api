@@ -15,7 +15,7 @@
  * If a message is received, all messages received after will be dropped until
  * tiny_gea2_interface_run() is called.
  *
- * Note: This module requires an interrupt event . This "interrupt" is an event
+ * Note: This module requires an interrupt event. This "interrupt" is an event
  * that needs to happen in the same context as the `on_receive`.
  *
  */
