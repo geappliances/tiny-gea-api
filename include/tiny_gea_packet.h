@@ -26,7 +26,7 @@ enum {
 /*!
  * Macro for allocating a GEA3 packet with a given payload size on the stack.  Payload size is set automatically.
  */
-#define tiny_gea3_STACK_ALLOC_PACKET(_name, _payloadLength)                                  \
+#define tiny_gea_STACK_ALLOC_PACKET(_name, _payloadLength)                                   \
   uint8_t _name##Storage[_payloadLength + tiny_gea_packet_overhead] = { 0, _payloadLength }; \
   tiny_gea_packet_t* const _name = (tiny_gea_packet_t*)_name##Storage
 
@@ -37,9 +37,9 @@ enum {
  * @note The payload types should have no alignment requirements (all fields should have single-byte
  * alignment, ie: should be u8s).
  */
-#define tiny_gea3_STACK_ALLOC_PACKET_TYPE(_packetName, _payloadName, _payloadType) \
-  tiny_gea3_STACK_ALLOC_PACKET(_packetName, sizeof(_payloadType));                 \
-  _payloadType* _payloadName;                                                      \
+#define tiny_gea_STACK_ALLOC_PACKET_TYPE(_packetName, _payloadName, _payloadType) \
+  tiny_gea_STACK_ALLOC_PACKET(_packetName, sizeof(_payloadType));                 \
+  _payloadType* _payloadName;                                                     \
   _payloadName = (_payloadType*)_packetName->payload;
 
 /*!
