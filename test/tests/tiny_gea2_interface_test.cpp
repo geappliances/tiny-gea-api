@@ -614,7 +614,7 @@ TEST(tiny_gea2_interface, should_drop_packets_with_invalid_length)
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface, ShouldDropPacketsThatAreTooSmall)
+TEST(tiny_gea2_interface, should_drop_packets_that_are_too_small)
 {
   after_bytes_are_received_via_uart(
     tiny_gea3_stx,
