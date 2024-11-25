@@ -33,11 +33,6 @@
 
 typedef struct
 {
-  uint8_t type;
-} tiny_gea2_interface_diagnostics_args_t;
-
-typedef struct
-{
   i_tiny_gea_interface_t interface;
 
   struct
