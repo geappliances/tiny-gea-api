@@ -81,16 +81,7 @@ typedef struct
 } tiny_gea2_interface_t;
 
 /*!
- * @param instance
- * @param uart
- * @param time_source
- * @param msec_interrupt
- * @param receive_buffer
- * @param receive_buffer_size
- * @param send_buffer
- * @param send_buffer_size
- * @param address
- * @param ignore_destination_address Receives all valid packets when this is enabled to allow for routing or sniffing.
+ * Initialize a GEA2 interface.
  */
 void tiny_gea2_interface_init(
   tiny_gea2_interface_t* instance,
@@ -101,18 +92,15 @@ void tiny_gea2_interface_init(
   uint8_t receive_buffer_size,
   uint8_t* send_buffer,
   uint8_t send_buffer_size,
-  uint8_t address,
-  bool ignore_destination_address);
+  uint8_t address);
 
 /*!
- * Will emit received packets. Run this in the background context.
- * @param instance
+ * Run the interface and publish received packets.
  */
 void tiny_gea2_interface_run(tiny_gea2_interface_t* instance);
 
 /*!
- * @param instance
- * @param retries
+ * Set the retries to a custom amount
  */
 void tiny_gea2_interface_set_retries(tiny_gea2_interface_t* instance, uint8_t retries);
 

@@ -319,8 +319,7 @@ static bool received_packet_is_addressed_to_me(self_t* self)
 {
   tiny_gea3_packet_t* packet = (tiny_gea3_packet_t*)self->_private.receive.buffer;
   return (packet->destination == self->_private.address) ||
-    is_broadcast_address(packet->destination) ||
-    self->_private.ignore_destination_address;
+    is_broadcast_address(packet->destination);
 }
 
 static void send_ack(self_t* instance, uint8_t address)
@@ -598,14 +597,12 @@ void tiny_gea2_interface_init(
   uint8_t receive_buffer_size,
   uint8_t* send_buffer,
   uint8_t send_buffer_size,
-  uint8_t address,
-  bool ignore_destination_address)
+  uint8_t address)
 {
   instance->interface.api = &api;
   instance->_private.uart = uart;
   instance->_private.address = address;
   instance->_private.retries = default_retries;
-  instance->_private.ignore_destination_address = ignore_destination_address;
   instance->_private.receive.buffer = receive_buffer;
   instance->_private.receive.buffer_size = receive_buffer_size;
   instance->_private.receive.packet_ready = false;
