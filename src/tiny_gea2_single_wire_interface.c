@@ -320,7 +320,7 @@ static bool received_packet_is_addressed_to_me(self_t* self)
   reinterpret(packet, self->_private.receive.buffer, tiny_gea3_packet_t*);
   return (packet->destination == self->_private.address) ||
     is_broadcast_address(packet->destination) ||
-    self->_private.ignoreDestinationAddress;
+    self->_private.ignore_destination_address;
 }
 
 static void send_ack(self_t* instance, uint8_t address)
@@ -549,7 +549,7 @@ static bool send_worker(
   return true;
 }
 
-static void msec_interrupt(void* context, const void* _args)
+static void msec_interrupt_callback(void* context, const void* _args)
 {
   reinterpret(instance, context, self_t*);
   (void)_args;
@@ -585,7 +585,7 @@ static bool forward(
 static i_tiny_event_t* get_on_receive_event(i_tiny_gea3_interface_t* _instance)
 {
   reinterpret(instance, _instance, self_t*);
-  return &instance->_private.onReceive.interface;
+  return &instance->_private.on_receive.interface;
 }
 
 static const i_tiny_gea3_interface_api_t api = { send, forward, get_on_receive_event };
@@ -593,39 +593,39 @@ static const i_tiny_gea3_interface_api_t api = { send, forward, get_on_receive_e
 void tiny_gea2_interface_single_wire_init(
   self_t* instance,
   i_tiny_uart_t* uart,
-  i_tiny_time_source_t* timeSource,
-  i_tiny_event_t* msecInterrupt,
-  uint8_t* receiveBuffer,
-  uint8_t receiveBufferSize,
-  uint8_t* sendBuffer,
-  uint8_t sendBufferSize,
+  i_tiny_time_source_t* time_source,
+  i_tiny_event_t* msec_interrupt,
+  uint8_t* receive_buffer,
+  uint8_t receive_buffer_size,
+  uint8_t* send_buffer,
+  uint8_t send_buffer_size,
   uint8_t address,
-  bool ignoreDestinationAddress)
+  bool ignore_destination_address)
 {
   instance->interface.api = &api;
   instance->_private.uart = uart;
   instance->_private.address = address;
   instance->_private.retries = default_retries;
-  instance->_private.ignoreDestinationAddress = ignoreDestinationAddress;
-  instance->_private.receive.buffer = receiveBuffer;
-  instance->_private.receive.bufferSize = receiveBufferSize;
+  instance->_private.ignore_destination_address = ignore_destination_address;
+  instance->_private.receive.buffer = receive_buffer;
+  instance->_private.receive.bufferSize = receive_buffer_size;
   instance->_private.receive.packetReady = false;
   instance->_private.receive.escaped = false;
-  instance->_private.send.buffer = sendBuffer;
-  instance->_private.send.bufferSize = sendBufferSize;
+  instance->_private.send.buffer = send_buffer;
+  instance->_private.send.bufferSize = send_buffer_size;
   instance->_private.send.active = false;
   instance->_private.send.packetQueuedInBackground = false;
 
-  tiny_timer_group_init(&instance->_private.timerGroup, timeSource);
+  tiny_timer_group_init(&instance->_private.timerGroup, time_source);
 
-  tiny_event_subscription_init(&instance->_private.byteReceivedSubscription, instance, byte_received);
-  tiny_event_subscribe(tiny_uart_on_receive(uart), &instance->_private.byteReceivedSubscription);
+  tiny_event_subscription_init(&instance->_private.byte_received_subscription, instance, byte_received);
+  tiny_event_subscribe(tiny_uart_on_receive(uart), &instance->_private.byte_received_subscription);
 
-  tiny_event_subscription_init(&instance->_private.msecInterruptSubscription, instance, msec_interrupt);
-  tiny_event_subscribe(msecInterrupt, &instance->_private.msecInterruptSubscription);
+  tiny_event_subscription_init(&instance->_private.msec_interrupt_subscription, instance, msec_interrupt_callback);
+  tiny_event_subscribe(msec_interrupt, &instance->_private.msec_interrupt_subscription);
 
-  tiny_event_init(&instance->_private.onReceive);
-  tiny_event_init(&instance->_private.onDiagnosticsEvent);
+  tiny_event_init(&instance->_private.on_receive);
+  tiny_event_init(&instance->_private.on_diagnostics_event);
 
   tiny_fsm_init(&instance->_private.fsm, state_idle);
 }
@@ -636,7 +636,7 @@ void tiny_gea2_interface_single_wire_run(self_t* instance)
     tiny_gea3_interface_on_receive_args_t args;
     args.packet = (const tiny_gea3_packet_t*)instance->_private.receive.buffer;
 
-    tiny_event_publish(&instance->_private.onReceive, &args);
+    tiny_event_publish(&instance->_private.on_receive, &args);
     instance->_private.receive.packetReady = false;
   }
 }

@@ -40,14 +40,14 @@ typedef struct
   struct
   {
     tiny_fsm_t fsm;
-    tiny_event_t onReceive;
-    tiny_event_t onDiagnosticsEvent;
-    tiny_event_subscription_t msecInterruptSubscription;
-    tiny_event_subscription_t byteReceivedSubscription;
+    tiny_event_t on_receive;
+    tiny_event_t on_diagnostics_event;
+    tiny_event_subscription_t msec_interrupt_subscription;
+    tiny_event_subscription_t byte_received_subscription;
     i_tiny_uart_t* uart;
     tiny_timer_t timer;
     uint8_t address;
-    bool ignoreDestinationAddress;
+    bool ignore_destination_address;
     uint8_t retries;
     tiny_timer_group_t timerGroup;
 
@@ -80,27 +80,27 @@ typedef struct
 /*!
  * @param instance
  * @param uart
- * @param timeSource
- * @param msecInterrupt Used to run timing in the interrupt context. Must not pre-empt or be pre-empted by
+ * @param time_source
+ * @param msec_interrupt Used to run timing in the interrupt context. Must not pre-empt or be pre-empted by
  *   UART interrupts.
- * @param receiveBuffer
- * @param receiveBufferSize
- * @param sendBuffer
- * @param sendBufferSize
+ * @param receive_buffer
+ * @param receive_buffer_size
+ * @param send_buffer
+ * @param send_buffer_size
  * @param address
- * @param ignoreDestinationAddress Receives all valid packets when this is enabled to allow for routing or sniffing.
+ * @param ignore_destination_address Receives all valid packets when this is enabled to allow for routing or sniffing.
  */
 void tiny_gea2_interface_single_wire_init(
   tiny_gea2_interface_single_wire_t* instance,
   i_tiny_uart_t* uart,
-  i_tiny_time_source_t* timeSource,
-  i_tiny_event_t* msecInterrupt,
-  uint8_t* receiveBuffer,
-  uint8_t receiveBufferSize,
-  uint8_t* sendBuffer,
-  uint8_t sendBufferSize,
+  i_tiny_time_source_t* time_source,
+  i_tiny_event_t* msec_interrupt,
+  uint8_t* receive_buffer,
+  uint8_t receive_buffer_size,
+  uint8_t* send_buffer,
+  uint8_t send_buffer_size,
   uint8_t address,
-  bool ignoreDestinationAddress);
+  bool ignore_destination_address);
 
 /*!
  * Will emit received packets. Run this in the background context.
