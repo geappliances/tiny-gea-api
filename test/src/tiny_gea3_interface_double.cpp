@@ -69,7 +69,7 @@ void tiny_gea3_interface_double_init(tiny_gea3_interface_double_t* self, uint8_t
 
 void tiny_gea3_interface_double_trigger_receive(
   tiny_gea3_interface_double_t* self,
-  const tiny_gea3_packet_t* packet)
+  const tiny_gea_packet_t* packet)
 {
   tiny_gea3_interface_on_receive_args_t args = { packet };
   tiny_event_publish(&self->on_receive, &args);

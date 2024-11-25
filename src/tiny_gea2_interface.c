@@ -7,14 +7,14 @@
 #include "tiny_crc16.h"
 #include "tiny_fsm.h"
 #include "tiny_gea2_interface.h"
-#include "tiny_gea3_constants.h"
 #include "tiny_gea3_interface.h"
-#include "tiny_gea3_packet.h"
+#include "tiny_gea_constants.h"
+#include "tiny_gea_packet.h"
 #include "tiny_utils.h"
 
 enum {
   gea2_reflection_timeout_msec = 6,
-  tiny_gea3_ack_timeout_msec = 8,
+  tiny_gea_ack_timeout_msec = 8,
   gea2_broadcast_mask = 0xF0,
   default_retries = 2,
   gea2_interbyte_timeout_msec = 6,
@@ -22,7 +22,7 @@ enum {
 
 typedef tiny_gea2_interface_t self_t;
 
-// send packet should match tiny_gea3_packet_t, but stores data_length (per spec) instead of payload_length
+// send packet should match tiny_gea_packet_t, but stores data_length (per spec) instead of payload_length
 // (used application convenience)
 typedef struct {
   uint8_t destination;
@@ -43,9 +43,9 @@ enum {
 
 enum {
   send_packet_header_size = offsetof(send_packet_t, data),
-  data_length_bytes_not_included_in_data = tiny_gea3_packet_transmission_overhead - tiny_gea3_packet_overhead,
+  data_length_bytes_not_included_in_data = tiny_gea_packet_transmission_overhead - tiny_gea_packet_overhead,
   crc_size = sizeof(uint16_t),
-  packet_bytes_not_included_in_payload = crc_size + offsetof(tiny_gea3_packet_t, payload),
+  packet_bytes_not_included_in_payload = crc_size + offsetof(tiny_gea_packet_t, payload),
   unbuffered_bytes = 2 // STX, ETX
 };
 
@@ -78,7 +78,7 @@ static void byte_received(void* context, const void* _args)
   tiny_fsm_send_signal(&instance->_private.fsm, signal_byte_received, &args->byte);
 }
 
-#define needs_escape(_byte) ((_byte & 0xFC) == tiny_gea3_esc)
+#define needs_escape(_byte) ((_byte & 0xFC) == tiny_gea_esc)
 
 #define is_broadcast_address(_address) ((gea2_broadcast_mask & _address) == gea2_broadcast_mask)
 
@@ -100,7 +100,7 @@ static void state_idle(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, const vo
         break;
       }
 
-      if(*byte == tiny_gea3_stx && !instance->_private.receive.packet_ready) {
+      if(*byte == tiny_gea_stx && !instance->_private.receive.packet_ready) {
         tiny_fsm_transition(fsm, state_receive);
       }
       else {
@@ -120,7 +120,7 @@ static bool determine_byte_to_send_considering_escapes(self_t* instance, uint8_t
 {
   if(!instance->_private.send.escaped && needs_escape(byte)) {
     instance->_private.send.escaped = true;
-    *byte_to_send = tiny_gea3_esc;
+    *byte_to_send = tiny_gea_esc;
   }
   else {
     instance->_private.send.escaped = false;
@@ -143,7 +143,7 @@ static void send_next_byte(self_t* instance)
 
   switch(instance->_private.send.state) {
     case send_state_stx:
-      byte_to_send = tiny_gea3_stx;
+      byte_to_send = tiny_gea_stx;
       instance->_private.send.state = send_state_data;
       break;
 
@@ -173,7 +173,7 @@ static void send_next_byte(self_t* instance)
       break;
 
     case send_state_etx:
-      byte_to_send = tiny_gea3_etx;
+      byte_to_send = tiny_gea_etx;
       instance->_private.send.state = send_state_done;
       break;
   }
@@ -254,7 +254,7 @@ static void start_ack_timeout_timer(self_t* instance)
   tiny_timer_start(
     &instance->_private.timer_group,
     &instance->_private.timer,
-    tiny_gea3_ack_timeout_msec,
+    tiny_gea_ack_timeout_msec,
     instance,
     ack_timeout);
 }
@@ -270,7 +270,7 @@ static void state_wait_for_ack(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal, 
 
     case signal_byte_received: {
       const uint8_t* byte = data;
-      if(*byte == tiny_gea3_ack) {
+      if(*byte == tiny_gea_ack) {
         handle_success(instance);
       }
       else {
@@ -296,14 +296,14 @@ static bool received_packet_has_minimum_valid_length(self_t* self)
 
 static bool received_packet_has_valid_length(self_t* self)
 {
-  reinterpret(packet, self->_private.receive.buffer, tiny_gea3_packet_t*);
+  reinterpret(packet, self->_private.receive.buffer, tiny_gea_packet_t*);
   return (packet->payload_length == self->_private.receive.count + unbuffered_bytes);
 }
 
 static void buffer_received_byte(self_t* instance, uint8_t byte)
 {
   if(instance->_private.receive.count == 0) {
-    instance->_private.receive.crc = tiny_gea3_crc_seed;
+    instance->_private.receive.crc = tiny_gea_crc_seed;
   }
 
   if(instance->_private.receive.count < instance->_private.receive.buffer_size) {
@@ -317,7 +317,7 @@ static void buffer_received_byte(self_t* instance, uint8_t byte)
 
 static bool received_packet_is_addressed_to_me(self_t* self)
 {
-  reinterpret(packet, self->_private.receive.buffer, tiny_gea3_packet_t*);
+  reinterpret(packet, self->_private.receive.buffer, tiny_gea_packet_t*);
   return (packet->destination == self->_private.address) ||
     is_broadcast_address(packet->destination) ||
     self->_private.ignore_destination_address;
@@ -326,13 +326,13 @@ static bool received_packet_is_addressed_to_me(self_t* self)
 static void send_ack(self_t* instance, uint8_t address)
 {
   if(!is_broadcast_address(address)) {
-    tiny_uart_send(instance->_private.uart, tiny_gea3_ack);
+    tiny_uart_send(instance->_private.uart, tiny_gea_ack);
   }
 }
 
 static void process_received_byte(self_t* instance, const uint8_t byte)
 {
-  reinterpret(packet, instance->_private.receive.buffer, tiny_gea3_packet_t*);
+  reinterpret(packet, instance->_private.receive.buffer, tiny_gea_packet_t*);
 
   if(instance->_private.receive.escaped) {
     instance->_private.receive.escaped = false;
@@ -341,15 +341,15 @@ static void process_received_byte(self_t* instance, const uint8_t byte)
   }
 
   switch(byte) {
-    case tiny_gea3_esc:
+    case tiny_gea_esc:
       instance->_private.receive.escaped = true;
       break;
 
-    case tiny_gea3_stx:
+    case tiny_gea_stx:
       instance->_private.receive.count = 0;
       break;
 
-    case tiny_gea3_etx:
+    case tiny_gea_etx:
       if(!received_packet_has_minimum_valid_length(instance) || !received_packet_has_valid_length(instance)) {
         break;
       }
@@ -362,7 +362,7 @@ static void process_received_byte(self_t* instance, const uint8_t byte)
         break;
       }
 
-      packet->payload_length -= tiny_gea3_packet_transmission_overhead;
+      packet->payload_length -= tiny_gea_packet_transmission_overhead;
       instance->_private.receive.packet_ready = true;
 
       send_ack(instance, packet->destination);
@@ -415,7 +415,7 @@ static void state_collision_cooldown(tiny_fsm_t* fsm, const tiny_fsm_signal_t si
 
     case signal_byte_received: {
       const uint8_t* byte = data;
-      if(*byte == tiny_gea3_stx) {
+      if(*byte == tiny_gea_stx) {
         tiny_fsm_transition(fsm, state_receive);
       }
     } break;
@@ -488,7 +488,7 @@ static void state_idle_cooldown(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal,
 
     case signal_byte_received: {
       const uint8_t* byte = data;
-      if(*byte == tiny_gea3_stx && !instance->_private.receive.packet_ready) {
+      if(*byte == tiny_gea_stx && !instance->_private.receive.packet_ready) {
         tiny_fsm_transition(fsm, state_receive);
       }
       else {
@@ -507,8 +507,8 @@ static void state_idle_cooldown(tiny_fsm_t* fsm, const tiny_fsm_signal_t signal,
 static void prepare_buffered_packet_for_transmission(self_t* instance)
 {
   reinterpret(send_packet, instance->_private.send.buffer, send_packet_t*);
-  send_packet->data_length += tiny_gea3_packet_transmission_overhead;
-  instance->_private.send.crc = tiny_crc16_block(tiny_gea3_crc_seed, (uint8_t*)send_packet, send_packet->data_length - data_length_bytes_not_included_in_data);
+  send_packet->data_length += tiny_gea_packet_transmission_overhead;
+  instance->_private.send.crc = tiny_crc16_block(tiny_gea_crc_seed, (uint8_t*)send_packet, send_packet->data_length - data_length_bytes_not_included_in_data);
   instance->_private.send.state = send_state_stx;
   instance->_private.send.offset = 0;
 }
@@ -530,7 +530,7 @@ static bool send_worker(
     return false;
   }
 
-  reinterpret(send_packet, instance->_private.send.buffer, tiny_gea3_packet_t*);
+  reinterpret(send_packet, instance->_private.send.buffer, tiny_gea_packet_t*);
   send_packet->payload_length = payload_length;
   callback(context, send_packet);
 
@@ -635,7 +635,7 @@ void tiny_gea2_interface_run(self_t* instance)
 {
   if(instance->_private.receive.packet_ready) {
     tiny_gea3_interface_on_receive_args_t args;
-    args.packet = (const tiny_gea3_packet_t*)instance->_private.receive.buffer;
+    args.packet = (const tiny_gea_packet_t*)instance->_private.receive.buffer;
 
     tiny_event_publish(&instance->_private.on_receive, &args);
     instance->_private.receive.packet_ready = false;

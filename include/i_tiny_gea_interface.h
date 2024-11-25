@@ -11,13 +11,13 @@
 
 #include <stdbool.h>
 #include "i_tiny_event.h"
-#include "tiny_gea3_packet.h"
+#include "tiny_gea_packet.h"
 
 typedef struct {
-  const tiny_gea3_packet_t* packet;
+  const tiny_gea_packet_t* packet;
 } tiny_gea3_interface_on_receive_args_t;
 
-typedef void (*tiny_gea3_interface_send_callback_t)(void* context, tiny_gea3_packet_t* packet);
+typedef void (*tiny_gea3_interface_send_callback_t)(void* context, tiny_gea_packet_t* packet);
 
 struct i_tiny_gea_interface_api_t;
 

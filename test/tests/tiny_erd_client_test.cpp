@@ -232,7 +232,7 @@ TEST_GROUP(tiny_erd_client)
     tiny_event_subscribe(tiny_erd_client_on_activity(&self.interface), &request_again_on_request_complete_or_failed_subscription);
   }
 
-  void should_be_sent(const tiny_gea3_packet_t* request)
+  void should_be_sent(const tiny_gea_packet_t* request)
   {
     mock()
       .expectOneCall("send")

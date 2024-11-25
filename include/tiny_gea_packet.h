@@ -3,8 +3,8 @@
  * @brief GEA3 packet definition.
  */
 
-#ifndef tiny_gea3_packet_h
-#define tiny_gea3_packet_h
+#ifndef tiny_gea_packet_h
+#define tiny_gea_packet_h
 
 #include <stddef.h>
 #include <stdint.h>
@@ -14,21 +14,21 @@ typedef struct {
   uint8_t payload_length;
   uint8_t source;
   uint8_t payload[1];
-} tiny_gea3_packet_t;
+} tiny_gea_packet_t;
 
 enum {
   // STX, ETX, CRC (MSB + LSB), source, destination, length
-  tiny_gea3_packet_transmission_overhead = 7,
-  tiny_gea3_packet_overhead = offsetof(tiny_gea3_packet_t, payload),
-  tiny_gea3_packet_max_payload_length = 255 - tiny_gea3_packet_transmission_overhead,
+  tiny_gea_packet_transmission_overhead = 7,
+  tiny_gea_packet_overhead = offsetof(tiny_gea_packet_t, payload),
+  tiny_gea_packet_max_payload_length = 255 - tiny_gea_packet_transmission_overhead,
 };
 
 /*!
  * Macro for allocating a GEA3 packet with a given payload size on the stack.  Payload size is set automatically.
  */
-#define tiny_gea3_STACK_ALLOC_PACKET(_name, _payloadLength)                                   \
-  uint8_t _name##Storage[_payloadLength + tiny_gea3_packet_overhead] = { 0, _payloadLength }; \
-  tiny_gea3_packet_t* const _name = (tiny_gea3_packet_t*)_name##Storage
+#define tiny_gea3_STACK_ALLOC_PACKET(_name, _payloadLength)                                  \
+  uint8_t _name##Storage[_payloadLength + tiny_gea_packet_overhead] = { 0, _payloadLength }; \
+  tiny_gea_packet_t* const _name = (tiny_gea_packet_t*)_name##Storage
 
 /*!
  * Macro for allocating a GEA3 packet with with a provided payload type.  This sets the payload length
@@ -45,8 +45,8 @@ enum {
 /*!
  * Macro for statically allocating a GEA3 packet with a given payload size.  Payload size is set automatically.
  */
-#define tiny_gea3_STATIC_ALLOC_PACKET(_name, _payloadLength)                                         \
-  static uint8_t _name##Storage[_payloadLength + tiny_gea3_packet_overhead] = { 0, _payloadLength }; \
-  static tiny_gea3_packet_t* const _name = (tiny_gea3_packet_t*)_name##Storage
+#define tiny_gea3_STATIC_ALLOC_PACKET(_name, _payloadLength)                                        \
+  static uint8_t _name##Storage[_payloadLength + tiny_gea_packet_overhead] = { 0, _payloadLength }; \
+  static tiny_gea_packet_t* const _name = (tiny_gea_packet_t*)_name##Storage
 
 #endif
