@@ -61,7 +61,7 @@ static inline bool tiny_gea_interface_send(
 }
 
 /*!
- * Send a packet without setting source address
+ * Send a packet without setting source address.
  */
 static inline bool tiny_gea_interface_forward(
   i_tiny_gea_interface_t* self,
