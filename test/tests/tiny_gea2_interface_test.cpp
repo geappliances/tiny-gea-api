@@ -6,7 +6,6 @@
 extern "C" {
 #include <string.h>
 #include "tiny_gea2_interface.h"
-#include "tiny_gea3_interface.h"
 #include "tiny_gea_constants.h"
 #include "tiny_gea_packet.h"
 #include "tiny_timer.h"
