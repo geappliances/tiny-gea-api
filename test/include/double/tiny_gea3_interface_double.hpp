@@ -8,18 +8,18 @@
 
 extern "C" {
 #include <stdint.h>
-#include "i_tiny_gea3_interface.h"
+#include "i_tiny_gea_interface.h"
 #include "tiny_event.h"
 };
 
 typedef struct {
-  i_tiny_gea3_interface_t interface;
+  i_tiny_gea_interface_t interface;
 
   uint8_t address;
   tiny_event_t on_receive;
   union {
     uint8_t send_buffer[UINT8_MAX];
-    tiny_gea3_packet_t packet;
+    tiny_gea_packet_t packet;
   };
 } tiny_gea3_interface_double_t;
 
@@ -35,6 +35,6 @@ void tiny_gea3_interface_double_init(
  */
 void tiny_gea3_interface_double_trigger_receive(
   tiny_gea3_interface_double_t* self,
-  const tiny_gea3_packet_t* packet);
+  const tiny_gea_packet_t* packet);
 
 #endif

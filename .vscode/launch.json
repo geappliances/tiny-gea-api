@@ -10,10 +10,10 @@
       "request": "launch",
       "preLaunchTask": "Build",
       "program": "${workspaceFolder}/build/arduino-gea3-api_tests",
-      "args": [ ],
+      "args": [],
       "stopAtEntry": true,
       "cwd": "${workspaceFolder}",
-      "environment": [ ],
+      "environment": [],
       "externalConsole": false,
       "linux": {
         "MIMode": "gdb"

@@ -232,7 +232,7 @@ TEST_GROUP(tiny_erd_client)
     tiny_event_subscribe(tiny_erd_client_on_activity(&self.interface), &request_again_on_request_complete_or_failed_subscription);
   }
 
-  void should_be_sent(const tiny_gea3_packet_t* request)
+  void should_be_sent(const tiny_gea_packet_t* request)
   {
     mock()
       .expectOneCall("send")
@@ -244,7 +244,7 @@ TEST_GROUP(tiny_erd_client)
 
 #define a_read_request_should_be_sent(request_id, address, erd)   \
   do {                                                            \
-    tiny_gea3_STATIC_ALLOC_PACKET(request, 4);                    \
+    tiny_gea_STATIC_ALLOC_PACKET(request, 4);                     \
     request->source = endpoint_address;                           \
     request->destination = address;                               \
     request->payload[0] = tiny_gea3_erd_api_command_read_request; \
@@ -257,7 +257,7 @@ TEST_GROUP(tiny_erd_client)
 #define a_write_request_should_be_sent(request_id, address, erd, data) \
   do {                                                                 \
     if(sizeof(data) == 1) {                                            \
-      tiny_gea3_STATIC_ALLOC_PACKET(request, 6);                       \
+      tiny_gea_STATIC_ALLOC_PACKET(request, 6);                        \
       request->source = endpoint_address;                              \
       request->destination = address;                                  \
       request->payload[0] = tiny_gea3_erd_api_command_write_request;   \
@@ -269,7 +269,7 @@ TEST_GROUP(tiny_erd_client)
       should_be_sent(request);                                         \
     }                                                                  \
     else {                                                             \
-      tiny_gea3_STATIC_ALLOC_PACKET(request, 7);                       \
+      tiny_gea_STATIC_ALLOC_PACKET(request, 7);                        \
       request->source = endpoint_address;                              \
       request->destination = address;                                  \
       request->payload[0] = tiny_gea3_erd_api_command_write_request;   \
@@ -285,7 +285,7 @@ TEST_GROUP(tiny_erd_client)
 
 #define a_subscribe_all_request_should_be_sent(request_id, address, retain)                                                                                          \
   do {                                                                                                                                                               \
-    tiny_gea3_STATIC_ALLOC_PACKET(request, 3);                                                                                                                       \
+    tiny_gea_STATIC_ALLOC_PACKET(request, 3);                                                                                                                        \
     request->source = endpoint_address;                                                                                                                              \
     request->destination = address;                                                                                                                                  \
     request->payload[0] = tiny_gea3_erd_api_command_subscribe_all_request;                                                                                           \
@@ -296,7 +296,7 @@ TEST_GROUP(tiny_erd_client)
 
 #define a_subscription_publication_acknowledgment_should_be_sent(request_id, address, context) \
   do {                                                                                         \
-    tiny_gea3_STATIC_ALLOC_PACKET(request, 3);                                                 \
+    tiny_gea_STATIC_ALLOC_PACKET(request, 3);                                                  \
     request->source = endpoint_address;                                                        \
     request->destination = address;                                                            \
     request->payload[0] = tiny_gea3_erd_api_command_publication_acknowledgment;                \
@@ -307,7 +307,7 @@ TEST_GROUP(tiny_erd_client)
 
   void after_a_read_response_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, tiny_erd_t erd, uint8_t data)
   {
-    tiny_gea3_STACK_ALLOC_PACKET(packet, 7);
+    tiny_gea_STACK_ALLOC_PACKET(packet, 7);
     packet->source = address;
     packet->destination = endpoint_address;
     packet->payload[0] = tiny_gea3_erd_api_command_read_response;
@@ -323,7 +323,7 @@ TEST_GROUP(tiny_erd_client)
 
   void after_a_read_response_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, tiny_erd_t erd, uint16_t data)
   {
-    tiny_gea3_STACK_ALLOC_PACKET(packet, 8);
+    tiny_gea_STACK_ALLOC_PACKET(packet, 8);
     packet->source = address;
     packet->destination = endpoint_address;
     packet->payload[0] = tiny_gea3_erd_api_command_read_response;
@@ -340,7 +340,7 @@ TEST_GROUP(tiny_erd_client)
 
   void after_a_read_failure_response_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, tiny_erd_t erd, tiny_gea3_erd_api_read_result_t result)
   {
-    tiny_gea3_STACK_ALLOC_PACKET(packet, 5);
+    tiny_gea_STACK_ALLOC_PACKET(packet, 5);
     packet->source = address;
     packet->destination = endpoint_address;
     packet->payload[0] = tiny_gea3_erd_api_command_read_response;
@@ -354,7 +354,7 @@ TEST_GROUP(tiny_erd_client)
 
   void after_a_write_response_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, tiny_erd_t erd, tiny_gea3_erd_api_write_result_t result)
   {
-    tiny_gea3_STACK_ALLOC_PACKET(packet, 5);
+    tiny_gea_STACK_ALLOC_PACKET(packet, 5);
     packet->source = address;
     packet->destination = endpoint_address;
     packet->payload[0] = tiny_gea3_erd_api_command_write_response;
@@ -368,7 +368,7 @@ TEST_GROUP(tiny_erd_client)
 
   void after_a_malformed_write_response_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, tiny_erd_t erd, tiny_gea3_erd_api_write_result_t result)
   {
-    tiny_gea3_STACK_ALLOC_PACKET(packet, 6);
+    tiny_gea_STACK_ALLOC_PACKET(packet, 6);
     packet->source = address;
     packet->destination = endpoint_address;
     packet->payload[0] = tiny_gea3_erd_api_command_write_response;
@@ -382,7 +382,7 @@ TEST_GROUP(tiny_erd_client)
 
   void after_a_subscribe_all_response_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, bool successful)
   {
-    tiny_gea3_STACK_ALLOC_PACKET(packet, 3);
+    tiny_gea_STACK_ALLOC_PACKET(packet, 3);
     packet->source = address;
     packet->destination = endpoint_address;
     packet->payload[0] = tiny_gea3_erd_api_command_subscribe_all_response;
@@ -394,7 +394,7 @@ TEST_GROUP(tiny_erd_client)
 
   void after_a_subscription_publication_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, uint8_t context, tiny_erd_t erd, uint8_t data)
   {
-    tiny_gea3_STACK_ALLOC_PACKET(packet, 8);
+    tiny_gea_STACK_ALLOC_PACKET(packet, 8);
     packet->source = address;
     packet->destination = endpoint_address;
     packet->payload[0] = tiny_gea3_erd_api_command_publication;
@@ -411,7 +411,7 @@ TEST_GROUP(tiny_erd_client)
 
   void after_a_subscription_publication_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, uint8_t context, tiny_erd_t erd, uint16_t data)
   {
-    tiny_gea3_STACK_ALLOC_PACKET(packet, 9);
+    tiny_gea_STACK_ALLOC_PACKET(packet, 9);
     packet->source = address;
     packet->destination = endpoint_address;
     packet->payload[0] = tiny_gea3_erd_api_command_publication;
@@ -429,7 +429,7 @@ TEST_GROUP(tiny_erd_client)
 
   void after_a_subscription_publication_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, uint8_t context, tiny_erd_t erd1, uint8_t data1, tiny_erd_t erd2, uint16_t data2)
   {
-    tiny_gea3_STACK_ALLOC_PACKET(packet, 13);
+    tiny_gea_STACK_ALLOC_PACKET(packet, 13);
     packet->source = address;
     packet->destination = endpoint_address;
     packet->payload[0] = tiny_gea3_erd_api_command_publication;
@@ -451,7 +451,7 @@ TEST_GROUP(tiny_erd_client)
 
   void after_a_subscription_host_startup_is_received(uint8_t address)
   {
-    tiny_gea3_STACK_ALLOC_PACKET(packet, 1);
+    tiny_gea_STACK_ALLOC_PACKET(packet, 1);
     packet->source = address;
     packet->destination = endpoint_address;
     packet->payload[0] = tiny_gea3_erd_api_command_subscription_host_startup;

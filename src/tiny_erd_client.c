@@ -6,8 +6,8 @@
 #include <stddef.h>
 #include <string.h>
 #include "tiny_erd_client.h"
-#include "tiny_gea3_constants.h"
 #include "tiny_gea3_erd_api.h"
+#include "tiny_gea_constants.h"
 #include "tiny_stack_allocator.h"
 #include "tiny_utils.h"
 
@@ -55,12 +55,12 @@ typedef struct {
   read_request_t* request;
 } read_request_worker_context_t;
 
-static bool valid_read_request(const tiny_gea3_packet_t* packet)
+static bool valid_read_request(const tiny_gea_packet_t* packet)
 {
   return packet->payload_length == sizeof(tiny_gea3_erd_api_read_request_payload_t);
 }
 
-static bool valid_read_response(const tiny_gea3_packet_t* packet)
+static bool valid_read_response(const tiny_gea_packet_t* packet)
 {
   reinterpret(payload, packet->payload, const tiny_gea3_erd_api_read_response_payload_t*);
 
@@ -71,17 +71,17 @@ static bool valid_read_response(const tiny_gea3_packet_t* packet)
   return (packet->payload_length >= sizeof(tiny_gea3_erd_api_read_response_payload_header_t)) && (packet->payload_length == (sizeof(tiny_gea3_erd_api_read_response_payload_header_t) + payload->header.data_size));
 }
 
-static bool valid_write_request(const tiny_gea3_packet_t* packet)
+static bool valid_write_request(const tiny_gea_packet_t* packet)
 {
   return (packet->payload_length >= 5) && (packet->payload_length == (5 + packet->payload[4]));
 }
 
-static bool valid_write_response(const tiny_gea3_packet_t* packet)
+static bool valid_write_response(const tiny_gea_packet_t* packet)
 {
   return packet->payload_length == sizeof(tiny_gea3_erd_api_write_response_payload_t);
 }
 
-static bool valid_subscribe_all_request(const tiny_gea3_packet_t* packet)
+static bool valid_subscribe_all_request(const tiny_gea_packet_t* packet)
 {
   reinterpret(payload, packet->payload, const tiny_gea3_erd_api_subscribe_all_request_payload_t*);
 
@@ -101,7 +101,7 @@ static bool valid_subscribe_all_request(const tiny_gea3_packet_t* packet)
   return true;
 }
 
-static bool valid_subscribe_all_response(const tiny_gea3_packet_t* packet)
+static bool valid_subscribe_all_response(const tiny_gea_packet_t* packet)
 {
   reinterpret(payload, packet->payload, const tiny_gea3_erd_api_subscribe_all_response_payload_t*);
 
@@ -121,7 +121,7 @@ static bool valid_subscribe_all_response(const tiny_gea3_packet_t* packet)
   return true;
 }
 
-static bool valid_subscription_publication(const tiny_gea3_packet_t* packet)
+static bool valid_subscription_publication(const tiny_gea_packet_t* packet)
 {
   if(packet->payload_length < 4) {
     return false;
@@ -149,17 +149,17 @@ static bool valid_subscription_publication(const tiny_gea3_packet_t* packet)
   return actual_count == claimed_count;
 }
 
-static bool valid_subscription_publication_acknowledgment(const tiny_gea3_packet_t* packet)
+static bool valid_subscription_publication_acknowledgment(const tiny_gea_packet_t* packet)
 {
   return packet->payload_length == sizeof(tiny_gea3_erd_api_publication_acknowledgement_payload_t);
 }
 
-static bool valid_subscription_host_startup(const tiny_gea3_packet_t* packet)
+static bool valid_subscription_host_startup(const tiny_gea_packet_t* packet)
 {
   return packet->payload_length == 1;
 }
 
-static bool packet_is_valid(const tiny_gea3_packet_t* packet)
+static bool packet_is_valid(const tiny_gea_packet_t* packet)
 {
   if(packet->payload_length < 1) {
     return false;
@@ -197,7 +197,7 @@ static bool packet_is_valid(const tiny_gea3_packet_t* packet)
   return false;
 }
 
-static void send_read_request_worker(void* _context, tiny_gea3_packet_t* packet)
+static void send_read_request_worker(void* _context, tiny_gea_packet_t* packet)
 {
   read_request_worker_context_t* context = _context;
   self_t* self = context->self;
@@ -219,15 +219,15 @@ static void send_read_request(self_t* self)
 
   read_request_worker_context_t context = { self, &request };
 
-  tiny_gea3_interface_send(
+  tiny_gea_interface_send(
     self->gea3_interface,
     request.address,
     sizeof(tiny_gea3_erd_api_read_request_payload_t),
-    send_read_request_worker,
-    &context);
+    &context,
+    send_read_request_worker);
 }
 
-static void send_write_request_worker(void* _context, tiny_gea3_packet_t* packet)
+static void send_write_request_worker(void* _context, tiny_gea_packet_t* packet)
 {
   reinterpret(self, _context, self_t*);
 
@@ -250,12 +250,12 @@ static void send_write_request(self_t* self)
   write_request_t request;
   tiny_queue_peek_partial(&self->request_queue, &request, sizeof(request), 0);
 
-  tiny_gea3_interface_send(
+  tiny_gea_interface_send(
     self->gea3_interface,
     request.address,
     sizeof(tiny_gea3_erd_api_write_request_payload_header_t) + request.data_size,
-    send_write_request_worker,
-    self);
+    self,
+    send_write_request_worker);
 }
 
 typedef struct {
@@ -263,7 +263,7 @@ typedef struct {
   subscribe_request_t* request;
 } subscribe_request_worker_context_t;
 
-static void send_subscribe_request_worker(void* _context, tiny_gea3_packet_t* packet)
+static void send_subscribe_request_worker(void* _context, tiny_gea_packet_t* packet)
 {
   subscribe_request_worker_context_t* context = _context;
   self_t* self = context->self;
@@ -284,12 +284,12 @@ static void send_subscribe_request(self_t* self)
 
   subscribe_request_worker_context_t context = { self, &request };
 
-  tiny_gea3_interface_send(
+  tiny_gea_interface_send(
     self->gea3_interface,
     request.address,
     sizeof(tiny_gea3_erd_api_subscribe_all_request_payload_t),
-    send_subscribe_request_worker,
-    &context);
+    &context,
+    send_subscribe_request_worker);
 }
 
 static void resend_request(self_t* self);
@@ -468,7 +468,7 @@ static void resend_request(self_t* self)
   }
 }
 
-static void handle_read_response_packet(self_t* self, const tiny_gea3_packet_t* packet)
+static void handle_read_response_packet(self_t* self, const tiny_gea_packet_t* packet)
 {
   if(request_type(self) == request_type_read) {
     read_request_t request;
@@ -480,7 +480,7 @@ static void handle_read_response_packet(self_t* self, const tiny_gea3_packet_t* 
     tiny_gea3_erd_api_read_result_t result = payload->header.result;
 
     if((self->request_id == request_id) &&
-      ((request.address == packet->source) || (request.address == tiny_gea3_broadcast_address)) && (request.erd == erd)) {
+      ((request.address == packet->source) || (request.address == tiny_gea_broadcast_address)) && (request.erd == erd)) {
       if(result == tiny_gea3_erd_api_read_result_success) {
         tiny_erd_client_on_activity_args_t args;
         args.address = packet->source;
@@ -527,7 +527,7 @@ static void handle_write_response_packet_worker(void* _context, void* allocated_
   tiny_event_publish(&context->self->on_activity, &args);
 }
 
-static void handle_write_response_packet(self_t* self, const tiny_gea3_packet_t* packet)
+static void handle_write_response_packet(self_t* self, const tiny_gea_packet_t* packet)
 {
   if(request_type(self) == request_type_write) {
     write_request_t request;
@@ -539,7 +539,7 @@ static void handle_write_response_packet(self_t* self, const tiny_gea3_packet_t*
     tiny_gea3_erd_api_write_result_t result = payload->result;
 
     if((self->request_id == request_id) &&
-      ((request.address == packet->source) || (request.address == tiny_gea3_broadcast_address)) &&
+      ((request.address == packet->source) || (request.address == tiny_gea_broadcast_address)) &&
       (request.erd == erd)) {
       if(result == tiny_gea3_erd_api_write_result_success) {
         handle_write_response_packet_context_t context = { self, .clientAddress = packet->source };
@@ -555,7 +555,7 @@ static void handle_write_response_packet(self_t* self, const tiny_gea3_packet_t*
   }
 }
 
-static void handle_subscribe_all_response_packet(self_t* self, const tiny_gea3_packet_t* packet)
+static void handle_subscribe_all_response_packet(self_t* self, const tiny_gea_packet_t* packet)
 {
   if(request_type(self) == request_type_subscribe) {
     subscribe_request_t request;
@@ -588,7 +588,7 @@ typedef struct {
   uint8_t request_id;
 } subscription_publication_acknowledgment_worker_context_t;
 
-static void send_subscription_publication_acknowledgment_worker(void* _context, tiny_gea3_packet_t* packet)
+static void send_subscription_publication_acknowledgment_worker(void* _context, tiny_gea_packet_t* packet)
 {
   subscription_publication_acknowledgment_worker_context_t* context = _context;
   reinterpret(payload, packet->payload, tiny_gea3_erd_api_publication_acknowledgement_payload_t*);
@@ -602,15 +602,15 @@ static void send_subscription_publication_acknowledgment(self_t* self, uint8_t a
 {
   subscription_publication_acknowledgment_worker_context_t context = { _context, request_id };
 
-  tiny_gea3_interface_send(
+  tiny_gea_interface_send(
     self->gea3_interface,
     address,
     sizeof(tiny_gea3_erd_api_publication_acknowledgement_payload_t),
-    send_subscription_publication_acknowledgment_worker,
-    &context);
+    &context,
+    send_subscription_publication_acknowledgment_worker);
 }
 
-static void handle_subscription_publication_packet(self_t* self, const tiny_gea3_packet_t* packet)
+static void handle_subscription_publication_packet(self_t* self, const tiny_gea_packet_t* packet)
 {
   reinterpret(payload, packet->payload, const tiny_gea3_erd_api_publication_header_t*);
 
@@ -640,7 +640,7 @@ static void handle_subscription_publication_packet(self_t* self, const tiny_gea3
   send_subscription_publication_acknowledgment(self, address, context, request_id);
 }
 
-static void handle_subscription_host_startup_packet(self_t* self, const tiny_gea3_packet_t* packet)
+static void handle_subscription_host_startup_packet(self_t* self, const tiny_gea_packet_t* packet)
 {
   tiny_erd_client_on_activity_args_t args;
   args.address = packet->source;
@@ -652,7 +652,7 @@ static void handle_subscription_host_startup_packet(self_t* self, const tiny_gea
 static void packet_received(void* _self, const void* _args)
 {
   reinterpret(self, _self, self_t*);
-  reinterpret(args, _args, const tiny_gea3_interface_on_receive_args_t*);
+  reinterpret(args, _args, const tiny_gea_interface_on_receive_args_t*);
 
   if(!packet_is_valid(args->packet)) {
     return;
@@ -884,7 +884,7 @@ static const i_tiny_erd_client_api_t api = { read, write, subscribe, retain_subs
 void tiny_erd_client_init(
   tiny_erd_client_t* self,
   tiny_timer_group_t* timer_group,
-  i_tiny_gea3_interface_t* gea3_interface,
+  i_tiny_gea_interface_t* gea3_interface,
   uint8_t* queue_buffer,
   size_t queue_buffer_size,
   const tiny_erd_client_configuration_t* configuration)
@@ -902,5 +902,5 @@ void tiny_erd_client_init(
   tiny_event_init(&self->on_activity);
 
   tiny_event_subscription_init(&self->packet_received, self, packet_received);
-  tiny_event_subscribe(tiny_gea3_interface_on_receive(gea3_interface), &self->packet_received);
+  tiny_event_subscribe(tiny_gea_interface_on_receive(gea3_interface), &self->packet_received);
 }
