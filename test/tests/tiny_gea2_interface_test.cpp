@@ -64,7 +64,7 @@ TEST_GROUP(tiny_gea2_interface)
       default_retries);
 
     tiny_event_subscription_init(&receiveSubscription, NULL, packet_received);
-    tiny_event_subscribe(tiny_gea3_interface_on_receive(&instance.interface), &receiveSubscription);
+    tiny_event_subscribe(tiny_gea_interface_on_receive(&instance.interface), &receiveSubscription);
   }
 
   void given_that_ignore_destination_address_is_enabled()
@@ -82,7 +82,7 @@ TEST_GROUP(tiny_gea2_interface)
       true,
       default_retries);
 
-    tiny_event_subscribe(tiny_gea3_interface_on_receive(&instance.interface), &receiveSubscription);
+    tiny_event_subscribe(tiny_gea_interface_on_receive(&instance.interface), &receiveSubscription);
   }
 
   void given_that_retries_have_been_set_to(uint8_t retries)
@@ -103,7 +103,7 @@ TEST_GROUP(tiny_gea2_interface)
 
   static void packet_received(void*, const void* _args)
   {
-    reinterpret(args, _args, const tiny_gea3_interface_on_receive_args_t*);
+    reinterpret(args, _args, const tiny_gea_interface_on_receive_args_t*);
     mock()
       .actualCall("packet_received")
       .withParameter("source", args->packet->source)
@@ -203,13 +203,13 @@ TEST_GROUP(tiny_gea2_interface)
 
   void when_packet_is_sent(tiny_gea_packet_t * packet)
   {
-    tiny_gea3_interface_send(&instance.interface, packet->destination, packet->payload_length, send_callback, packet);
+    tiny_gea_interface_send(&instance.interface, packet->destination, packet->payload_length, packet, send_callback);
     after_msec_interrupt_fires();
   }
 
   void when_packet_is_forwarded(tiny_gea_packet_t * packet)
   {
-    tiny_gea3_interface_forward(&instance.interface, packet->destination, packet->payload_length, send_callback, packet);
+    tiny_gea_interface_forward(&instance.interface, packet->destination, packet->payload_length, packet, send_callback);
     after_msec_interrupt_fires();
   }
 

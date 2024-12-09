@@ -60,7 +60,7 @@ TEST_GROUP(tiny_gea3_interface)
 
     tiny_event_subscription_init(&receive_subscription, NULL, packet_received);
 
-    tiny_event_subscribe(tiny_gea3_interface_on_receive(&self.interface), &receive_subscription);
+    tiny_event_subscribe(tiny_gea_interface_on_receive(&self.interface), &receive_subscription);
 
     tiny_uart_double_configure_automatic_send_complete(&uart, true);
   }
@@ -79,12 +79,12 @@ TEST_GROUP(tiny_gea3_interface)
       sizeof(send_queue),
       true);
 
-    tiny_event_subscribe(tiny_gea3_interface_on_receive(&self.interface), &receive_subscription);
+    tiny_event_subscribe(tiny_gea_interface_on_receive(&self.interface), &receive_subscription);
   }
 
   static void packet_received(void*, const void* _args)
   {
-    reinterpret(args, _args, const tiny_gea3_interface_on_receive_args_t*);
+    reinterpret(args, _args, const tiny_gea_interface_on_receive_args_t*);
     mock()
       .actualCall("packet_received")
       .withParameter("source", args->packet->source)
@@ -144,17 +144,17 @@ TEST_GROUP(tiny_gea3_interface)
 
   void when_packet_is_sent(tiny_gea_packet_t * packet)
   {
-    tiny_gea3_interface_send(&self.interface, packet->destination, packet->payload_length, send_callback, packet);
+    tiny_gea_interface_send(&self.interface, packet->destination, packet->payload_length, packet, send_callback);
   }
 
   void when_packet_is_forwarded(tiny_gea_packet_t * packet)
   {
-    tiny_gea3_interface_forward(&self.interface, packet->destination, packet->payload_length, send_callback, packet);
+    tiny_gea_interface_forward(&self.interface, packet->destination, packet->payload_length, packet, send_callback);
   }
 
   void packet_should_fail_to_send(tiny_gea_packet_t * packet)
   {
-    CHECK_FALSE(tiny_gea3_interface_send(&self.interface, packet->destination, packet->payload_length, send_callback, packet));
+    CHECK_FALSE(tiny_gea_interface_send(&self.interface, packet->destination, packet->payload_length, packet, send_callback));
   }
 
   void given_that_a_packet_has_been_sent()
@@ -192,7 +192,7 @@ TEST_GROUP(tiny_gea3_interface)
     uint8_t queue_size_in_packets = send_queue_size / packet_size;
 
     for(int i = 0; i < queue_size_in_packets - 1; i++) {
-      tiny_gea3_interface_send(&self.interface, packet->destination, packet->payload_length, send_callback, packet);
+      tiny_gea_interface_send(&self.interface, packet->destination, packet->payload_length, packet, send_callback);
     }
   }
 

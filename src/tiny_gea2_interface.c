@@ -517,7 +517,7 @@ static bool send_worker(
   i_tiny_gea_interface_t* _instance,
   uint8_t destination,
   uint8_t payload_length,
-  tiny_gea3_interface_send_callback_t callback,
+  tiny_gea_interface_send_callback_t callback,
   void* context,
   bool set_source_address)
 {
@@ -565,8 +565,8 @@ static bool send(
   i_tiny_gea_interface_t* _instance,
   uint8_t destination,
   uint8_t payload_length,
-  tiny_gea3_interface_send_callback_t callback,
-  void* context)
+  void* context,
+  tiny_gea_interface_send_callback_t callback)
 {
   return send_worker(_instance, destination, payload_length, callback, context, true);
 }
@@ -575,8 +575,8 @@ static bool forward(
   i_tiny_gea_interface_t* _self,
   uint8_t destination,
   uint8_t payload_length,
-  tiny_gea3_interface_send_callback_t callback,
-  void* context)
+  void* context,
+  tiny_gea_interface_send_callback_t callback)
 {
   return send_worker(_self, destination, payload_length, callback, context, false);
 }
@@ -634,7 +634,7 @@ void tiny_gea2_interface_init(
 void tiny_gea2_interface_run(self_t* instance)
 {
   if(instance->_private.receive.packet_ready) {
-    tiny_gea3_interface_on_receive_args_t args;
+    tiny_gea_interface_on_receive_args_t args;
     args.packet = (const tiny_gea_packet_t*)instance->_private.receive.buffer;
 
     tiny_event_publish(&instance->_private.on_receive, &args);

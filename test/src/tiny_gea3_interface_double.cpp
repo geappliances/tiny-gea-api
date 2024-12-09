@@ -11,8 +11,8 @@ static bool send(
   i_tiny_gea_interface_t* _self,
   uint8_t destination,
   uint8_t payload_length,
-  tiny_gea3_interface_send_callback_t callback,
-  void* context)
+  void* context,
+  tiny_gea_interface_send_callback_t callback)
 {
   reinterpret(self, _self, tiny_gea3_interface_double_t*);
   self->packet.destination = destination;
@@ -34,8 +34,8 @@ static bool forward(
   i_tiny_gea_interface_t* _self,
   uint8_t destination,
   uint8_t payload_length,
-  tiny_gea3_interface_send_callback_t callback,
-  void* context)
+  void* context,
+  tiny_gea_interface_send_callback_t callback)
 {
   reinterpret(self, _self, tiny_gea3_interface_double_t*);
   self->packet.destination = destination;
@@ -71,6 +71,6 @@ void tiny_gea3_interface_double_trigger_receive(
   tiny_gea3_interface_double_t* self,
   const tiny_gea_packet_t* packet)
 {
-  tiny_gea3_interface_on_receive_args_t args = { packet };
+  tiny_gea_interface_on_receive_args_t args = { packet };
   tiny_event_publish(&self->on_receive, &args);
 }
