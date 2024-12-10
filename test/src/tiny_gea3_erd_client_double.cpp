@@ -4,11 +4,11 @@
  */
 
 #include "CppUTestExt/MockSupport.h"
-#include "double/tiny_erd_client_double.hpp"
+#include "double/tiny_gea3_erd_client_double.hpp"
 
 static bool read(
-  i_tiny_erd_client_t* self,
-  tiny_erd_client_request_id_t* request_id,
+  i_tiny_gea3_erd_client_t* self,
+  tiny_gea3_erd_client_request_id_t* request_id,
   uint8_t address,
   tiny_erd_t erd)
 {
@@ -22,8 +22,8 @@ static bool read(
 }
 
 static bool write(
-  i_tiny_erd_client_t* self,
-  tiny_erd_client_request_id_t* request_id,
+  i_tiny_gea3_erd_client_t* self,
+  tiny_gea3_erd_client_request_id_t* request_id,
   uint8_t address,
   tiny_erd_t erd,
   const void* data,
@@ -39,7 +39,7 @@ static bool write(
     .returnBoolValueOrDefault(true);
 }
 
-static bool subscribe(i_tiny_erd_client_t* self, uint8_t address)
+static bool subscribe(i_tiny_gea3_erd_client_t* self, uint8_t address)
 {
   return mock()
     .actualCall("subscribe")
@@ -48,7 +48,7 @@ static bool subscribe(i_tiny_erd_client_t* self, uint8_t address)
     .returnBoolValueOrDefault(true);
 }
 
-static bool retain_subscription(i_tiny_erd_client_t* self, uint8_t address)
+static bool retain_subscription(i_tiny_gea3_erd_client_t* self, uint8_t address)
 {
   return mock()
     .actualCall("retain_subscription")
@@ -57,13 +57,13 @@ static bool retain_subscription(i_tiny_erd_client_t* self, uint8_t address)
     .returnBoolValueOrDefault(true);
 }
 
-static i_tiny_event_t* on_activity(i_tiny_erd_client_t* _self)
+static i_tiny_event_t* on_activity(i_tiny_gea3_erd_client_t* _self)
 {
-  auto self = reinterpret_cast<tiny_erd_client_double_t*>(_self);
+  auto self = reinterpret_cast<tiny_gea3_erd_client_double_t*>(_self);
   return &self->on_activity.interface;
 }
 
-static const i_tiny_erd_client_api_t api = {
+static const i_tiny_gea3_erd_client_api_t api = {
   read,
   write,
   subscribe,
@@ -71,13 +71,13 @@ static const i_tiny_erd_client_api_t api = {
   on_activity
 };
 
-void tiny_erd_client_double_init(tiny_erd_client_double_t* self)
+void tiny_gea3_erd_client_double_init(tiny_gea3_erd_client_double_t* self)
 {
   self->interface.api = &api;
   tiny_event_init(&self->on_activity);
 }
 
-void tiny_erd_client_double_trigger_activity_event(tiny_erd_client_double_t* self, const tiny_erd_client_on_activity_args_t* args)
+void tiny_gea3_erd_client_double_trigger_activity_event(tiny_gea3_erd_client_double_t* self, const tiny_gea3_erd_client_on_activity_args_t* args)
 {
   tiny_event_publish(&self->on_activity, args);
 }

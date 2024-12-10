@@ -5,8 +5,8 @@
 
 #include <stddef.h>
 #include <string.h>
-#include "tiny_erd_client.h"
 #include "tiny_gea3_erd_api.h"
+#include "tiny_gea3_erd_client.h"
 #include "tiny_gea_constants.h"
 #include "tiny_stack_allocator.h"
 #include "tiny_utils.h"
@@ -48,7 +48,7 @@ typedef struct {
 
 typedef bool (*requests_conflict_predicate_t)(const request_t* new_request, const request_t* queued_request);
 
-typedef tiny_erd_client_t self_t;
+typedef tiny_gea3_erd_client_t self_t;
 
 typedef struct {
   self_t* self;
@@ -371,15 +371,15 @@ static void finish_request(self_t* self)
   send_request_if_not_busy(self);
 }
 
-static void handle_read_failure(self_t* self, tiny_erd_client_read_failure_reason_t reason)
+static void handle_read_failure(self_t* self, tiny_gea3_erd_client_read_failure_reason_t reason)
 {
   read_request_t request;
   uint16_t size;
   tiny_queue_peek(&self->request_queue, &request, &size, 0);
 
-  tiny_erd_client_on_activity_args_t args;
+  tiny_gea3_erd_client_on_activity_args_t args;
   args.address = request.address;
-  args.type = tiny_erd_client_activity_type_read_failed;
+  args.type = tiny_gea3_erd_client_activity_type_read_failed;
   args.read_failed.erd = request.erd;
   args.read_failed.request_id = self->request_id;
   args.read_failed.reason = reason;
@@ -391,7 +391,7 @@ static void handle_read_failure(self_t* self, tiny_erd_client_read_failure_reaso
 
 typedef struct {
   self_t* self;
-  tiny_erd_client_write_failure_reason_t reason;
+  tiny_gea3_erd_client_write_failure_reason_t reason;
 } handle_write_failure_context_t;
 
 static void HandleWriteFailureWorker(void* _context, void* allocated_block)
@@ -402,9 +402,9 @@ static void HandleWriteFailureWorker(void* _context, void* allocated_block)
   uint16_t size;
   tiny_queue_peek(&context->self->request_queue, request, &size, 0);
 
-  tiny_erd_client_on_activity_args_t args;
+  tiny_gea3_erd_client_on_activity_args_t args;
   args.address = request->address;
-  args.type = tiny_erd_client_activity_type_write_failed;
+  args.type = tiny_gea3_erd_client_activity_type_write_failed;
   args.write_failed.request_id = context->self->request_id;
   args.write_failed.erd = request->erd;
   args.write_failed.data = request->data;
@@ -416,7 +416,7 @@ static void HandleWriteFailureWorker(void* _context, void* allocated_block)
   tiny_event_publish(&context->self->on_activity, &args);
 }
 
-static void handle_write_failure(self_t* self, tiny_erd_client_write_failure_reason_t reason)
+static void handle_write_failure(self_t* self, tiny_gea3_erd_client_write_failure_reason_t reason)
 {
   write_request_t request;
   tiny_queue_peek_partial(&self->request_queue, &request, offsetof(write_request_t, data), 0);
@@ -431,9 +431,9 @@ static void handle_subscribe_failure(self_t* self)
   uint16_t size;
   tiny_queue_peek(&self->request_queue, &request, &size, 0);
 
-  tiny_erd_client_on_activity_args_t args;
+  tiny_gea3_erd_client_on_activity_args_t args;
   args.address = request.address;
-  args.type = tiny_erd_client_activity_type_subscribe_failed;
+  args.type = tiny_gea3_erd_client_activity_type_subscribe_failed;
 
   finish_request(self);
 
@@ -464,7 +464,7 @@ static void resend_request(self_t* self)
     send_request(self);
   }
   else {
-    fail_request(self, tiny_erd_client_read_failure_reason_retries_exhausted);
+    fail_request(self, tiny_gea3_erd_client_read_failure_reason_retries_exhausted);
   }
 }
 
@@ -482,9 +482,9 @@ static void handle_read_response_packet(self_t* self, const tiny_gea_packet_t* p
     if((self->request_id == request_id) &&
       ((request.address == packet->source) || (request.address == tiny_gea_broadcast_address)) && (request.erd == erd)) {
       if(result == tiny_gea3_erd_api_read_result_success) {
-        tiny_erd_client_on_activity_args_t args;
+        tiny_gea3_erd_client_on_activity_args_t args;
         args.address = packet->source;
-        args.type = tiny_erd_client_activity_type_read_completed;
+        args.type = tiny_gea3_erd_client_activity_type_read_completed;
         args.read_completed.request_id = request_id;
         args.read_completed.erd = erd;
         args.read_completed.data_size = payload->header.data_size;
@@ -495,7 +495,7 @@ static void handle_read_response_packet(self_t* self, const tiny_gea_packet_t* p
         tiny_event_publish(&self->on_activity, &args);
       }
       else if(result == tiny_gea3_erd_api_read_result_unsupported_erd) {
-        fail_request(self, tiny_erd_client_read_failure_reason_not_supported);
+        fail_request(self, tiny_gea3_erd_client_read_failure_reason_not_supported);
       }
     }
   }
@@ -514,9 +514,9 @@ static void handle_write_response_packet_worker(void* _context, void* allocated_
   uint16_t size;
   tiny_queue_peek(&context->self->request_queue, request, &size, 0);
 
-  tiny_erd_client_on_activity_args_t args;
+  tiny_gea3_erd_client_on_activity_args_t args;
   args.address = context->clientAddress;
-  args.type = tiny_erd_client_activity_type_write_completed;
+  args.type = tiny_gea3_erd_client_activity_type_write_completed;
   args.write_completed.request_id = context->self->request_id;
   args.write_completed.erd = request->erd;
   args.write_completed.data = request->data;
@@ -546,10 +546,10 @@ static void handle_write_response_packet(self_t* self, const tiny_gea_packet_t* 
         tiny_stack_allocator_allocate_aligned(request.data_size + offsetof(write_request_t, data), &context, handle_write_response_packet_worker);
       }
       else if(result == tiny_gea3_erd_api_write_result_incorrect_size) {
-        fail_request(self, tiny_erd_client_write_failure_reason_incorrect_size);
+        fail_request(self, tiny_gea3_erd_client_write_failure_reason_incorrect_size);
       }
       else if(result == tiny_gea3_erd_api_write_result_unsupported_erd) {
-        fail_request(self, tiny_erd_client_write_failure_reason_not_supported);
+        fail_request(self, tiny_gea3_erd_client_write_failure_reason_not_supported);
       }
     }
   }
@@ -568,9 +568,9 @@ static void handle_subscribe_all_response_packet(self_t* self, const tiny_gea_pa
     if((self->request_id == request_id) &&
       (request.address == packet->source)) {
       if(result == tiny_gea3_erd_api_subscribe_all_result_success) {
-        tiny_erd_client_on_activity_args_t args;
+        tiny_gea3_erd_client_on_activity_args_t args;
         args.address = packet->source;
-        args.type = tiny_erd_client_activity_type_subscription_added_or_retained;
+        args.type = tiny_gea3_erd_client_activity_type_subscription_added_or_retained;
 
         finish_request(self);
 
@@ -623,9 +623,9 @@ static void handle_subscription_publication_packet(self_t* self, const tiny_gea_
 
     uint8_t data_size = packet->payload[offset++];
 
-    tiny_erd_client_on_activity_args_t args;
+    tiny_gea3_erd_client_on_activity_args_t args;
     args.address = packet->source;
-    args.type = tiny_erd_client_activity_type_subscription_publication_received;
+    args.type = tiny_gea3_erd_client_activity_type_subscription_publication_received;
     args.subscription_publication_received.erd = erd;
     args.subscription_publication_received.data_size = data_size;
     args.subscription_publication_received.data = &packet->payload[offset];
@@ -642,9 +642,9 @@ static void handle_subscription_publication_packet(self_t* self, const tiny_gea_
 
 static void handle_subscription_host_startup_packet(self_t* self, const tiny_gea_packet_t* packet)
 {
-  tiny_erd_client_on_activity_args_t args;
+  tiny_gea3_erd_client_on_activity_args_t args;
   args.address = packet->source;
-  args.type = tiny_erd_client_activity_type_subscription_host_came_online;
+  args.type = tiny_gea3_erd_client_activity_type_subscription_host_came_online;
 
   tiny_event_publish(&self->on_activity, &args);
 }
@@ -759,7 +759,7 @@ static bool read_request_conflicts(const request_t* new_request, const request_t
   }
 }
 
-static bool read(i_tiny_erd_client_t* _self, tiny_erd_client_request_id_t* request_id, uint8_t address, tiny_erd_t erd)
+static bool read(i_tiny_gea3_erd_client_t* _self, tiny_gea3_erd_client_request_id_t* request_id, uint8_t address, tiny_erd_t erd)
 {
   reinterpret(self, _self, self_t*);
 
@@ -787,7 +787,7 @@ typedef struct {
   const void* data;
   tiny_erd_t erd;
   uint16_t index;
-  tiny_erd_client_request_id_t request_id;
+  tiny_gea3_erd_client_request_id_t request_id;
   uint8_t address;
   uint8_t data_size;
   bool request_added_or_already_queued;
@@ -829,7 +829,7 @@ static void write_worker(void* _context, void* allocated_block)
   send_request_if_not_busy(context->self);
 }
 
-static bool write(i_tiny_erd_client_t* _self, tiny_erd_client_request_id_t* request_id, uint8_t address, tiny_erd_t erd, const void* data, uint8_t data_size)
+static bool write(i_tiny_gea3_erd_client_t* _self, tiny_gea3_erd_client_request_id_t* request_id, uint8_t address, tiny_erd_t erd, const void* data, uint8_t data_size)
 {
   reinterpret(self, _self, self_t*);
 
@@ -861,33 +861,33 @@ static bool subscribe_or_retain(self_t* self, uint8_t address, bool retain)
   return request_added_or_already_queued;
 }
 
-static bool subscribe(i_tiny_erd_client_t* _self, uint8_t address)
+static bool subscribe(i_tiny_gea3_erd_client_t* _self, uint8_t address)
 {
   reinterpret(self, _self, self_t*);
   return subscribe_or_retain(self, address, false);
 }
 
-static bool retain_subscription(i_tiny_erd_client_t* _self, uint8_t address)
+static bool retain_subscription(i_tiny_gea3_erd_client_t* _self, uint8_t address)
 {
   reinterpret(self, _self, self_t*);
   return subscribe_or_retain(self, address, true);
 }
 
-static i_tiny_event_t* on_activity(i_tiny_erd_client_t* _self)
+static i_tiny_event_t* on_activity(i_tiny_gea3_erd_client_t* _self)
 {
   reinterpret(self, _self, self_t*);
   return &self->on_activity.interface;
 }
 
-static const i_tiny_erd_client_api_t api = { read, write, subscribe, retain_subscription, on_activity };
+static const i_tiny_gea3_erd_client_api_t api = { read, write, subscribe, retain_subscription, on_activity };
 
-void tiny_erd_client_init(
-  tiny_erd_client_t* self,
+void tiny_gea3_erd_client_init(
+  tiny_gea3_erd_client_t* self,
   tiny_timer_group_t* timer_group,
   i_tiny_gea_interface_t* gea3_interface,
   uint8_t* queue_buffer,
   size_t queue_buffer_size,
-  const tiny_erd_client_configuration_t* configuration)
+  const tiny_gea3_erd_client_configuration_t* configuration)
 {
   self->interface.api = &api;
 

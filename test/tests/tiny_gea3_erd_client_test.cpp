@@ -5,8 +5,8 @@
 
 extern "C" {
 #include <string.h>
-#include "tiny_erd_client.h"
 #include "tiny_gea3_erd_api.h"
+#include "tiny_gea3_erd_client.h"
 #include "tiny_utils.h"
 }
 
@@ -31,17 +31,17 @@ enum {
 #define and_then
 #define and_
 
-static const tiny_erd_client_configuration_t configuration = {
+static const tiny_gea3_erd_client_configuration_t configuration = {
   .request_timeout = request_timeout,
   .request_retries = request_retries
 };
 
-static tiny_erd_client_request_id_t lastRequestId;
+static tiny_gea3_erd_client_request_id_t lastRequestId;
 static size_t expected_data_size;
 
-TEST_GROUP(tiny_erd_client)
+TEST_GROUP(tiny_gea3_erd_client)
 {
-  tiny_erd_client_t self;
+  tiny_gea3_erd_client_t self;
 
   tiny_event_subscription_t activity_subscription;
   tiny_event_subscription_t request_again_on_request_complete_or_failed_subscription;
@@ -51,10 +51,10 @@ TEST_GROUP(tiny_erd_client)
 
   static void on_activity(void*, const void* _args)
   {
-    reinterpret(args, _args, const tiny_erd_client_on_activity_args_t*);
+    reinterpret(args, _args, const tiny_gea3_erd_client_on_activity_args_t*);
 
     switch(args->type) {
-      case tiny_erd_client_activity_type_read_completed:
+      case tiny_gea3_erd_client_activity_type_read_completed:
         if(expected_data_size == sizeof(uint8_t)) {
           mock()
             .actualCall("read_completed")
@@ -75,7 +75,7 @@ TEST_GROUP(tiny_erd_client)
         }
         break;
 
-      case tiny_erd_client_activity_type_read_failed:
+      case tiny_gea3_erd_client_activity_type_read_failed:
         mock()
           .actualCall("read_failed")
           .withParameter("request_id", args->read_completed.request_id)
@@ -84,7 +84,7 @@ TEST_GROUP(tiny_erd_client)
           .withParameter("reason", args->read_failed.reason);
         break;
 
-      case tiny_erd_client_activity_type_write_completed:
+      case tiny_gea3_erd_client_activity_type_write_completed:
         if(expected_data_size == sizeof(uint8_t)) {
           mock()
             .actualCall("write_completed")
@@ -105,7 +105,7 @@ TEST_GROUP(tiny_erd_client)
         }
         break;
 
-      case tiny_erd_client_activity_type_write_failed:
+      case tiny_gea3_erd_client_activity_type_write_failed:
         if(expected_data_size == sizeof(uint8_t)) {
           mock()
             .actualCall("write_failed")
@@ -128,19 +128,19 @@ TEST_GROUP(tiny_erd_client)
         }
         break;
 
-      case tiny_erd_client_activity_type_subscription_added_or_retained:
+      case tiny_gea3_erd_client_activity_type_subscription_added_or_retained:
         mock()
           .actualCall("subscription_added_or_retained")
           .withParameter("address", args->address);
         break;
 
-      case tiny_erd_client_activity_type_subscribe_failed:
+      case tiny_gea3_erd_client_activity_type_subscribe_failed:
         mock()
           .actualCall("subscription_failed")
           .withParameter("address", args->address);
         break;
 
-      case tiny_erd_client_activity_type_subscription_publication_received:
+      case tiny_gea3_erd_client_activity_type_subscription_publication_received:
         if(args->subscription_publication_received.erd == 0x8888) {
           expected_data_size = sizeof(uint8_t);
         }
@@ -166,7 +166,7 @@ TEST_GROUP(tiny_erd_client)
         }
         break;
 
-      case tiny_erd_client_activity_type_subscription_host_came_online:
+      case tiny_gea3_erd_client_activity_type_subscription_host_came_online:
         mock()
           .actualCall("SubscriptionHostCameOnline")
           .withParameter("address", args->address);
@@ -176,32 +176,32 @@ TEST_GROUP(tiny_erd_client)
 
   static void request_again_on_request_complete_or_failed(void* context, const void* _args)
   {
-    reinterpret(self, context, i_tiny_erd_client_t*);
-    reinterpret(args, _args, const tiny_erd_client_on_activity_args_t*);
+    reinterpret(self, context, i_tiny_gea3_erd_client_t*);
+    reinterpret(args, _args, const tiny_gea3_erd_client_on_activity_args_t*);
 
     switch(args->type) {
-      case tiny_erd_client_activity_type_read_completed:
-        tiny_erd_client_read(self, &lastRequestId, args->address, args->read_completed.erd);
+      case tiny_gea3_erd_client_activity_type_read_completed:
+        tiny_gea3_erd_client_read(self, &lastRequestId, args->address, args->read_completed.erd);
         break;
 
-      case tiny_erd_client_activity_type_read_failed:
-        tiny_erd_client_read(self, &lastRequestId, args->address, args->read_failed.erd);
+      case tiny_gea3_erd_client_activity_type_read_failed:
+        tiny_gea3_erd_client_read(self, &lastRequestId, args->address, args->read_failed.erd);
         break;
 
-      case tiny_erd_client_activity_type_write_completed:
-        tiny_erd_client_write(self, &lastRequestId, args->address, args->write_completed.erd, args->write_completed.data, args->write_completed.data_size);
+      case tiny_gea3_erd_client_activity_type_write_completed:
+        tiny_gea3_erd_client_write(self, &lastRequestId, args->address, args->write_completed.erd, args->write_completed.data, args->write_completed.data_size);
         break;
 
-      case tiny_erd_client_activity_type_write_failed:
-        tiny_erd_client_write(self, &lastRequestId, args->address, args->write_failed.erd, args->write_failed.data, args->write_failed.data_size);
+      case tiny_gea3_erd_client_activity_type_write_failed:
+        tiny_gea3_erd_client_write(self, &lastRequestId, args->address, args->write_failed.erd, args->write_failed.data, args->write_failed.data_size);
         break;
 
-      case tiny_erd_client_activity_type_subscription_added_or_retained:
-        tiny_erd_client_subscribe(self, args->address);
+      case tiny_gea3_erd_client_activity_type_subscription_added_or_retained:
+        tiny_gea3_erd_client_subscribe(self, args->address);
         break;
 
-      case tiny_erd_client_activity_type_subscribe_failed:
-        tiny_erd_client_subscribe(self, args->address);
+      case tiny_gea3_erd_client_activity_type_subscribe_failed:
+        tiny_gea3_erd_client_subscribe(self, args->address);
         break;
     }
   }
@@ -213,7 +213,7 @@ TEST_GROUP(tiny_erd_client)
 
     memset(&self, 0xA5, sizeof(self));
 
-    tiny_erd_client_init(
+    tiny_gea3_erd_client_init(
       &self,
       &timer_group.timer_group,
       &gea3_interface.interface,
@@ -222,14 +222,14 @@ TEST_GROUP(tiny_erd_client)
       &configuration);
 
     tiny_event_subscription_init(&activity_subscription, nullptr, on_activity);
-    tiny_event_subscribe(tiny_erd_client_on_activity(&self.interface), &activity_subscription);
+    tiny_event_subscribe(tiny_gea3_erd_client_on_activity(&self.interface), &activity_subscription);
 
     tiny_event_subscription_init(&request_again_on_request_complete_or_failed_subscription, &self, request_again_on_request_complete_or_failed);
   }
 
   void given_that_the_client_will_request_again_on_complete_or_failed()
   {
-    tiny_event_subscribe(tiny_erd_client_on_activity(&self.interface), &request_again_on_request_complete_or_failed_subscription);
+    tiny_event_subscribe(tiny_gea3_erd_client_on_activity(&self.interface), &request_again_on_request_complete_or_failed_subscription);
   }
 
   void should_be_sent(const tiny_gea_packet_t* request)
@@ -466,53 +466,53 @@ TEST_GROUP(tiny_erd_client)
 
   void after_a_read_is_requested(uint8_t address, tiny_erd_t erd)
   {
-    bool success = tiny_erd_client_read(&self.interface, &lastRequestId, address, erd);
+    bool success = tiny_gea3_erd_client_read(&self.interface, &lastRequestId, address, erd);
     CHECK(success);
   }
 
   void should_fail_to_queue_a_read_request(uint8_t address, tiny_erd_t erd)
   {
-    CHECK_FALSE(tiny_erd_client_read(&self.interface, &lastRequestId, address, erd));
+    CHECK_FALSE(tiny_gea3_erd_client_read(&self.interface, &lastRequestId, address, erd));
   }
 
   void after_a_write_is_requested(uint8_t address, tiny_erd_t erd, uint8_t data)
   {
-    bool success = tiny_erd_client_write(&self.interface, &lastRequestId, address, erd, &data, sizeof(data));
+    bool success = tiny_gea3_erd_client_write(&self.interface, &lastRequestId, address, erd, &data, sizeof(data));
     CHECK(success);
   }
 
   void should_fail_to_queue_a_write_request(uint8_t address, tiny_erd_t erd, uint8_t data)
   {
-    CHECK_FALSE(tiny_erd_client_write(&self.interface, &lastRequestId, address, erd, &data, sizeof(data)));
+    CHECK_FALSE(tiny_gea3_erd_client_write(&self.interface, &lastRequestId, address, erd, &data, sizeof(data)));
   }
 
   void after_a_write_is_requested(uint8_t address, tiny_erd_t erd, uint16_t data)
   {
     uint8_t big_endian_data[] = { (uint8_t)(data >> 8), (uint8_t)data };
-    bool success = tiny_erd_client_write(&self.interface, &lastRequestId, address, erd, big_endian_data, sizeof(big_endian_data));
+    bool success = tiny_gea3_erd_client_write(&self.interface, &lastRequestId, address, erd, big_endian_data, sizeof(big_endian_data));
     CHECK(success);
   }
 
   void after_subscribe_is_requested(uint8_t address)
   {
-    bool success = tiny_erd_client_subscribe(&self.interface, address);
+    bool success = tiny_gea3_erd_client_subscribe(&self.interface, address);
     CHECK(success);
   }
 
   void should_fail_to_queue_a_subscribe_request(uint8_t address)
   {
-    CHECK_FALSE(tiny_erd_client_subscribe(&self.interface, address));
+    CHECK_FALSE(tiny_gea3_erd_client_subscribe(&self.interface, address));
   }
 
   void after_retain_subscription_is_requested(uint8_t address)
   {
-    bool success = tiny_erd_client_retain_subscription(&self.interface, address);
+    bool success = tiny_gea3_erd_client_retain_subscription(&self.interface, address);
     CHECK(success);
   }
 
   void should_fail_to_queue_a_retain_subscription_request(uint8_t address)
   {
-    CHECK_FALSE(tiny_erd_client_retain_subscription(&self.interface, address));
+    CHECK_FALSE(tiny_gea3_erd_client_retain_subscription(&self.interface, address));
   }
 
   void should_publish_read_completed(uint8_t address, tiny_erd_t erd, uint8_t data)
@@ -528,7 +528,7 @@ TEST_GROUP(tiny_erd_client)
       .ignoreOtherParameters();
   }
 
-  void should_publish_read_completed(uint8_t address, tiny_erd_t erd, uint8_t data, tiny_erd_client_request_id_t request_id)
+  void should_publish_read_completed(uint8_t address, tiny_erd_t erd, uint8_t data, tiny_gea3_erd_client_request_id_t request_id)
   {
     expected_data_size = sizeof(data);
 
@@ -555,7 +555,7 @@ TEST_GROUP(tiny_erd_client)
       .ignoreOtherParameters();
   }
 
-  void should_publish_read_failed(uint8_t address, tiny_erd_t erd, tiny_erd_client_read_failure_reason_t reason)
+  void should_publish_read_failed(uint8_t address, tiny_erd_t erd, tiny_gea3_erd_client_read_failure_reason_t reason)
   {
     mock()
       .expectOneCall("read_failed")
@@ -565,7 +565,7 @@ TEST_GROUP(tiny_erd_client)
       .ignoreOtherParameters();
   }
 
-  void should_publish_read_failed(uint8_t address, tiny_erd_t erd, tiny_erd_client_request_id_t request_id, tiny_erd_client_read_failure_reason_t reason)
+  void should_publish_read_failed(uint8_t address, tiny_erd_t erd, tiny_gea3_erd_client_request_id_t request_id, tiny_gea3_erd_client_read_failure_reason_t reason)
   {
     mock()
       .expectOneCall("read_failed")
@@ -589,7 +589,7 @@ TEST_GROUP(tiny_erd_client)
       .ignoreOtherParameters();
   }
 
-  void should_publish_write_completed(uint8_t address, tiny_erd_t erd, uint8_t data, tiny_erd_client_request_id_t request_id)
+  void should_publish_write_completed(uint8_t address, tiny_erd_t erd, uint8_t data, tiny_gea3_erd_client_request_id_t request_id)
   {
     expected_data_size = sizeof(data);
 
@@ -616,7 +616,7 @@ TEST_GROUP(tiny_erd_client)
       .ignoreOtherParameters();
   }
 
-  void should_publish_write_failed(uint8_t address, tiny_erd_t erd, uint8_t data, tiny_erd_client_write_failure_reason_t reason)
+  void should_publish_write_failed(uint8_t address, tiny_erd_t erd, uint8_t data, tiny_gea3_erd_client_write_failure_reason_t reason)
   {
     expected_data_size = sizeof(data);
 
@@ -630,7 +630,7 @@ TEST_GROUP(tiny_erd_client)
       .ignoreOtherParameters();
   }
 
-  void should_publish_write_failed(uint8_t address, tiny_erd_t erd, uint8_t data, tiny_erd_client_request_id_t request_id, tiny_erd_client_write_failure_reason_t reason)
+  void should_publish_write_failed(uint8_t address, tiny_erd_t erd, uint8_t data, tiny_gea3_erd_client_request_id_t request_id, tiny_gea3_erd_client_write_failure_reason_t reason)
   {
     expected_data_size = sizeof(data);
 
@@ -645,7 +645,7 @@ TEST_GROUP(tiny_erd_client)
       .ignoreOtherParameters();
   }
 
-  void should_publish_write_failed(uint8_t address, tiny_erd_t erd, uint16_t data, tiny_erd_client_write_failure_reason_t reason)
+  void should_publish_write_failed(uint8_t address, tiny_erd_t erd, uint16_t data, tiny_gea3_erd_client_write_failure_reason_t reason)
   {
     expected_data_size = sizeof(data);
 
@@ -706,7 +706,7 @@ TEST_GROUP(tiny_erd_client)
       .withParameter("address", address);
   }
 
-  void with_an_expected_request_id(tiny_erd_client_request_id_t expected)
+  void with_an_expected_request_id(tiny_gea3_erd_client_request_id_t expected)
   {
     CHECK_EQUAL(expected, lastRequestId);
   }
@@ -716,7 +716,7 @@ TEST_GROUP(tiny_erd_client)
   }
 };
 
-TEST(tiny_erd_client, should_read)
+TEST(tiny_gea3_erd_client, should_read)
 {
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
@@ -729,7 +729,7 @@ TEST(tiny_erd_client, should_read)
   after_a_read_response_is_received(request_id(1), address(0x23), erd(0x5678), (uint16_t)1234);
 }
 
-TEST(tiny_erd_client, should_allow_a_read_to_be_completed_with_any_address_if_the_destination_is_the_broadcast_address)
+TEST(tiny_gea3_erd_client, should_allow_a_read_to_be_completed_with_any_address_if_the_destination_is_the_broadcast_address)
 {
   a_read_request_should_be_sent(request_id(0), address(0xFF), erd(0x1234));
   after_a_read_is_requested(address(0xFF), erd(0x1234));
@@ -737,7 +737,7 @@ TEST(tiny_erd_client, should_allow_a_read_to_be_completed_with_any_address_if_th
   after_a_read_response_is_received(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
 }
 
-TEST(tiny_erd_client, should_not_complete_a_read_with_the_wrong_type_address_request_id_erd_or_result_is_busy)
+TEST(tiny_gea3_erd_client, should_not_complete_a_read_with_the_wrong_type_address_request_id_erd_or_result_is_busy)
 {
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
@@ -750,16 +750,16 @@ TEST(tiny_erd_client, should_not_complete_a_read_with_the_wrong_type_address_req
   after_a_read_failure_response_is_received(request_id(0), address(0x54), erd(0x1234), tiny_gea3_erd_api_read_result_busy);
 }
 
-TEST(tiny_erd_client, should_complete_read_with_failure_if_the_result_is_unsupported_erd)
+TEST(tiny_gea3_erd_client, should_complete_read_with_failure_if_the_result_is_unsupported_erd)
 {
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
 
-  should_publish_read_failed(address(0x54), erd(0x1234), tiny_erd_client_read_failure_reason_not_supported);
+  should_publish_read_failed(address(0x54), erd(0x1234), tiny_gea3_erd_client_read_failure_reason_not_supported);
   after_a_read_failure_response_is_received(request_id(0), address(0x54), erd(0x1234), tiny_gea3_erd_api_read_result_unsupported_erd);
 }
 
-TEST(tiny_erd_client, should_write)
+TEST(tiny_gea3_erd_client, should_write)
 {
   a_write_request_should_be_sent(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
   after_a_write_is_requested(address(0x54), erd(0x1234), (uint8_t)123);
@@ -772,7 +772,7 @@ TEST(tiny_erd_client, should_write)
   after_a_write_response_is_received(request_id(1), address(0x23), erd(0x5678), tiny_gea3_erd_api_write_result_success);
 }
 
-TEST(tiny_erd_client, should_allow_a_write_to_be_completed_with_any_address_if_the_destination_is_the_broadcast_address)
+TEST(tiny_gea3_erd_client, should_allow_a_write_to_be_completed_with_any_address_if_the_destination_is_the_broadcast_address)
 {
   a_write_request_should_be_sent(request_id(0), address(0xFF), erd(0x1234), (uint8_t)123);
   after_a_write_is_requested(address(0xFF), erd(0x1234), (uint8_t)123);
@@ -780,7 +780,7 @@ TEST(tiny_erd_client, should_allow_a_write_to_be_completed_with_any_address_if_t
   after_a_write_response_is_received(request_id(0), address(0x54), erd(0x1234), tiny_gea3_erd_api_write_result_success);
 }
 
-TEST(tiny_erd_client, should_not_complete_a_write_with_the_wrong_type_address_request_id_erd_or_result_is_busy)
+TEST(tiny_gea3_erd_client, should_not_complete_a_write_with_the_wrong_type_address_request_id_erd_or_result_is_busy)
 {
   a_write_request_should_be_sent(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
   after_a_write_is_requested(address(0x54), erd(0x1234), (uint8_t)123);
@@ -793,25 +793,25 @@ TEST(tiny_erd_client, should_not_complete_a_write_with_the_wrong_type_address_re
   after_a_write_response_is_received(request_id(0), address(0x54), erd(0x1234), tiny_gea3_erd_api_write_result_busy);
 }
 
-TEST(tiny_erd_client, should_complete_write_with_failure_if_the_result_is_incorrect_size)
+TEST(tiny_gea3_erd_client, should_complete_write_with_failure_if_the_result_is_incorrect_size)
 {
   a_write_request_should_be_sent(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
   after_a_write_is_requested(address(0x54), erd(0x1234), (uint8_t)123);
 
-  should_publish_write_failed(address(0x54), erd(0x1234), (uint8_t)123, tiny_erd_client_write_failure_reason_incorrect_size);
+  should_publish_write_failed(address(0x54), erd(0x1234), (uint8_t)123, tiny_gea3_erd_client_write_failure_reason_incorrect_size);
   after_a_write_response_is_received(request_id(0), address(0x54), erd(0x1234), tiny_gea3_erd_api_write_result_incorrect_size);
 }
 
-TEST(tiny_erd_client, should_complete_write_with_failure_if_the_result_is_unsupported_erd)
+TEST(tiny_gea3_erd_client, should_complete_write_with_failure_if_the_result_is_unsupported_erd)
 {
   a_write_request_should_be_sent(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
   after_a_write_is_requested(address(0x54), erd(0x1234), (uint8_t)123);
 
-  should_publish_write_failed(address(0x54), erd(0x1234), (uint8_t)123, tiny_erd_client_write_failure_reason_not_supported);
+  should_publish_write_failed(address(0x54), erd(0x1234), (uint8_t)123, tiny_gea3_erd_client_write_failure_reason_not_supported);
   after_a_write_response_is_received(request_id(0), address(0x54), erd(0x1234), tiny_gea3_erd_api_write_result_unsupported_erd);
 }
 
-TEST(tiny_erd_client, should_subscribe)
+TEST(tiny_gea3_erd_client, should_subscribe)
 {
   a_subscribe_all_request_should_be_sent(request_id(0), address(0x54), retain(false));
   after_subscribe_is_requested(address(0x54));
@@ -819,7 +819,7 @@ TEST(tiny_erd_client, should_subscribe)
   after_a_subscribe_all_response_is_received(request_id(0), address(0x54), successful(true));
 }
 
-TEST(tiny_erd_client, should_fail_a_subscription_all_when_a_negative_response_is_received)
+TEST(tiny_gea3_erd_client, should_fail_a_subscription_all_when_a_negative_response_is_received)
 {
   a_subscribe_all_request_should_be_sent(request_id(0), address(0x54), retain(false));
   after_subscribe_is_requested(address(0x54));
@@ -828,7 +828,7 @@ TEST(tiny_erd_client, should_fail_a_subscription_all_when_a_negative_response_is
   after_a_subscribe_all_response_is_received(request_id(0), address(0x54), successful(false));
 }
 
-TEST(tiny_erd_client, should_retain_subscription)
+TEST(tiny_gea3_erd_client, should_retain_subscription)
 {
   a_subscribe_all_request_should_be_sent(request_id(0), address(0x54), retain(true));
   after_retain_subscription_is_requested(address(0x54));
@@ -836,7 +836,7 @@ TEST(tiny_erd_client, should_retain_subscription)
   after_a_subscribe_all_response_is_received(request_id(0), address(0x54), successful(true));
 }
 
-TEST(tiny_erd_client, should_not_complete_a_retain_subscription_with_the_wrong_type_address_or_request_id)
+TEST(tiny_gea3_erd_client, should_not_complete_a_retain_subscription_with_the_wrong_type_address_or_request_id)
 {
   a_subscribe_all_request_should_be_sent(request_id(0), address(0x54), retain(true));
   after_retain_subscription_is_requested(address(0x54));
@@ -847,7 +847,7 @@ TEST(tiny_erd_client, should_not_complete_a_retain_subscription_with_the_wrong_t
   after_a_subscribe_all_response_is_received(request_id(0), address(0x55), successful(true));
 }
 
-TEST(tiny_erd_client, should_fail_a_retain_subscription_when_a_negative_response_is_received)
+TEST(tiny_gea3_erd_client, should_fail_a_retain_subscription_when_a_negative_response_is_received)
 {
   a_subscribe_all_request_should_be_sent(request_id(0), address(0x54), retain(true));
   after_retain_subscription_is_requested(address(0x54));
@@ -856,7 +856,7 @@ TEST(tiny_erd_client, should_fail_a_retain_subscription_when_a_negative_response
   after_a_subscribe_all_response_is_received(request_id(0), address(0x54), successful(false));
 }
 
-TEST(tiny_erd_client, should_acknowledge_publications)
+TEST(tiny_gea3_erd_client, should_acknowledge_publications)
 {
   should_publish_subscription_publication_received(address(0x42), erd(0x1234), (uint8_t)5);
   a_subscription_publication_acknowledgment_should_be_sent(request_id(123), address(0x42), context(0xA5));
@@ -867,7 +867,7 @@ TEST(tiny_erd_client, should_acknowledge_publications)
   after_a_subscription_publication_is_received(request_id(123), address(0x42), context(0xA5), erd(0x1234), (uint16_t)4242);
 }
 
-TEST(tiny_erd_client, should_acknowledge_publications_with_multiple_erds)
+TEST(tiny_gea3_erd_client, should_acknowledge_publications_with_multiple_erds)
 {
   should_publish_subscription_publication_received(address(0x42), erd(0x8888), (uint8_t)5);
   should_publish_subscription_publication_received(address(0x42), erd(0x1616), (uint16_t)4242);
@@ -875,13 +875,13 @@ TEST(tiny_erd_client, should_acknowledge_publications_with_multiple_erds)
   after_a_subscription_publication_is_received(request_id(123), address(0x42), context(0xA5), erd(0x8888), (uint8_t)5, erd(0x1616), (uint16_t)4242);
 }
 
-TEST(tiny_erd_client, should_indicate_when_a_subscription_host_has_come_online)
+TEST(tiny_gea3_erd_client, should_indicate_when_a_subscription_host_has_come_online)
 {
   should_publish_subscription_host_came_online(address(0x42));
   after_a_subscription_host_startup_is_received(address(0x42));
 }
 
-TEST(tiny_erd_client, should_queue_requests)
+TEST(tiny_gea3_erd_client, should_queue_requests)
 {
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
@@ -905,7 +905,7 @@ TEST(tiny_erd_client, should_queue_requests)
   after_a_subscribe_all_response_is_received(request_id(3), address(0x55), successful(true));
 }
 
-TEST(tiny_erd_client, should_indicate_when_requests_cannot_be_queued)
+TEST(tiny_gea3_erd_client, should_indicate_when_requests_cannot_be_queued)
 {
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
@@ -919,7 +919,7 @@ TEST(tiny_erd_client, should_indicate_when_requests_cannot_be_queued)
   should_fail_to_queue_a_write_request(address(0x75), erd(0x5678), (uint8_t)21);
 }
 
-TEST(tiny_erd_client, should_retry_failed_read_requests)
+TEST(tiny_gea3_erd_client, should_retry_failed_read_requests)
 {
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
@@ -935,14 +935,14 @@ TEST(tiny_erd_client, should_retry_failed_read_requests)
   nothing_should_happen();
   after(request_timeout - 1);
 
-  should_publish_read_failed(address(0x54), erd(0x1234), tiny_erd_client_read_failure_reason_retries_exhausted);
+  should_publish_read_failed(address(0x54), erd(0x1234), tiny_gea3_erd_client_read_failure_reason_retries_exhausted);
   after(1);
 
   nothing_should_happen();
   after(request_timeout * 5);
 }
 
-TEST(tiny_erd_client, should_retry_failed_write_requests)
+TEST(tiny_gea3_erd_client, should_retry_failed_write_requests)
 {
   a_write_request_should_be_sent(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
   after_a_write_is_requested(address(0x54), erd(0x1234), (uint8_t)123);
@@ -958,14 +958,14 @@ TEST(tiny_erd_client, should_retry_failed_write_requests)
   nothing_should_happen();
   after(request_timeout - 1);
 
-  should_publish_write_failed(address(0x54), erd(0x1234), (uint8_t)123, tiny_erd_client_write_failure_reason_retries_exhausted);
+  should_publish_write_failed(address(0x54), erd(0x1234), (uint8_t)123, tiny_gea3_erd_client_write_failure_reason_retries_exhausted);
   after(1);
 
   nothing_should_happen();
   after(request_timeout * 5);
 }
 
-TEST(tiny_erd_client, should_retry_failed_subscribe_requests)
+TEST(tiny_gea3_erd_client, should_retry_failed_subscribe_requests)
 {
   a_subscribe_all_request_should_be_sent(request_id(0), address(0x54), retain(false));
   after_subscribe_is_requested(address(0x54));
@@ -988,7 +988,7 @@ TEST(tiny_erd_client, should_retry_failed_subscribe_requests)
   after(request_timeout * 5);
 }
 
-TEST(tiny_erd_client, should_not_retry_successful_requests)
+TEST(tiny_gea3_erd_client, should_not_retry_successful_requests)
 {
   a_subscribe_all_request_should_be_sent(request_id(0), address(0x54), retain(false));
   after_subscribe_is_requested(address(0x54));
@@ -999,7 +999,7 @@ TEST(tiny_erd_client, should_not_retry_successful_requests)
   after(request_timeout * 5);
 }
 
-TEST(tiny_erd_client, should_continue_to_the_next_request_after_a_failed_request)
+TEST(tiny_gea3_erd_client, should_continue_to_the_next_request_after_a_failed_request)
 {
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
@@ -1010,12 +1010,12 @@ TEST(tiny_erd_client, should_continue_to_the_next_request_after_a_failed_request
     after(request_timeout);
   }
 
-  should_publish_read_failed(address(0x54), erd(0x1234), tiny_erd_client_read_failure_reason_retries_exhausted);
+  should_publish_read_failed(address(0x54), erd(0x1234), tiny_gea3_erd_client_read_failure_reason_retries_exhausted);
   a_read_request_should_be_sent(request_id(1), address(0x64), erd(0x0001));
   after(request_timeout);
 }
 
-TEST(tiny_erd_client, should_reject_malformed_requests)
+TEST(tiny_gea3_erd_client, should_reject_malformed_requests)
 {
   a_write_request_should_be_sent(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
   after_a_write_is_requested(address(0x54), erd(0x1234), (uint8_t)123);
@@ -1024,7 +1024,7 @@ TEST(tiny_erd_client, should_reject_malformed_requests)
   after_a_malformed_write_response_is_received(request_id(0), address(0x54), erd(0x1234), tiny_gea3_erd_api_write_result_success);
 }
 
-TEST(tiny_erd_client, should_ignore_duplicate_read_requests_that_are_back_to_back)
+TEST(tiny_gea3_erd_client, should_ignore_duplicate_read_requests_that_are_back_to_back)
 {
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
@@ -1034,7 +1034,7 @@ TEST(tiny_erd_client, should_ignore_duplicate_read_requests_that_are_back_to_bac
   after_a_read_response_is_received(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
 }
 
-TEST(tiny_erd_client, should_ignore_duplicate_read_requests_that_are_separated_by_another_read)
+TEST(tiny_gea3_erd_client, should_ignore_duplicate_read_requests_that_are_separated_by_another_read)
 {
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
@@ -1049,7 +1049,7 @@ TEST(tiny_erd_client, should_ignore_duplicate_read_requests_that_are_separated_b
   after_a_read_response_is_received(request_id(1), address(0x54), erd(0x5678), (uint8_t)73);
 }
 
-TEST(tiny_erd_client, should_ignore_duplicate_read_requests_that_are_separated_by_a_subscribe_request)
+TEST(tiny_gea3_erd_client, should_ignore_duplicate_read_requests_that_are_separated_by_a_subscribe_request)
 {
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
@@ -1061,7 +1061,7 @@ TEST(tiny_erd_client, should_ignore_duplicate_read_requests_that_are_separated_b
   after_a_read_response_is_received(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
 }
 
-TEST(tiny_erd_client, should_not_ignore_duplicate_read_requests_that_are_separated_by_a_write)
+TEST(tiny_gea3_erd_client, should_not_ignore_duplicate_read_requests_that_are_separated_by_a_write)
 {
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
@@ -1077,7 +1077,7 @@ TEST(tiny_erd_client, should_not_ignore_duplicate_read_requests_that_are_separat
   after_a_write_response_is_received(request_id(1), address(0x54), erd(0x5678), tiny_gea3_erd_api_write_result_success);
 }
 
-TEST(tiny_erd_client, should_ignore_duplicate_write_requests_that_are_back_to_back)
+TEST(tiny_gea3_erd_client, should_ignore_duplicate_write_requests_that_are_back_to_back)
 {
   a_write_request_should_be_sent(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
   after_a_write_is_requested(address(0x54), erd(0x1234), (uint8_t)123);
@@ -1087,7 +1087,7 @@ TEST(tiny_erd_client, should_ignore_duplicate_write_requests_that_are_back_to_ba
   after_a_write_response_is_received(request_id(0), address(0x54), erd(0x1234), tiny_gea3_erd_api_write_result_success);
 }
 
-TEST(tiny_erd_client, should_ignore_duplicate_write_requests_that_are_separated_by_subscribe_requests)
+TEST(tiny_gea3_erd_client, should_ignore_duplicate_write_requests_that_are_separated_by_subscribe_requests)
 {
   a_write_request_should_be_sent(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
   after_a_write_is_requested(address(0x54), erd(0x1234), (uint8_t)123);
@@ -1102,7 +1102,7 @@ TEST(tiny_erd_client, should_ignore_duplicate_write_requests_that_are_separated_
   after_a_subscribe_all_response_is_received(request_id(1), address(0x27), successful(true));
 }
 
-TEST(tiny_erd_client, should_not_ignore_duplicate_write_requests_if_it_would_change_the_values_written)
+TEST(tiny_gea3_erd_client, should_not_ignore_duplicate_write_requests_if_it_would_change_the_values_written)
 {
   a_write_request_should_be_sent(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
   after_a_write_is_requested(address(0x54), erd(0x1234), (uint8_t)123);
@@ -1118,7 +1118,7 @@ TEST(tiny_erd_client, should_not_ignore_duplicate_write_requests_if_it_would_cha
   after_a_write_response_is_received(request_id(1), address(0x54), erd(0x5678), tiny_gea3_erd_api_write_result_success);
 }
 
-TEST(tiny_erd_client, should_not_ignore_duplicate_write_requests_if_theres_a_read_between_the_duplicate_writes)
+TEST(tiny_gea3_erd_client, should_not_ignore_duplicate_write_requests_if_theres_a_read_between_the_duplicate_writes)
 {
   a_write_request_should_be_sent(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
   after_a_write_is_requested(address(0x54), erd(0x1234), (uint8_t)123);
@@ -1134,7 +1134,7 @@ TEST(tiny_erd_client, should_not_ignore_duplicate_write_requests_if_theres_a_rea
   after_a_read_response_is_received(request_id(1), address(0x54), erd(0x5678), (uint8_t)7);
 }
 
-TEST(tiny_erd_client, should_ignore_duplicate_subscribe_requests)
+TEST(tiny_gea3_erd_client, should_ignore_duplicate_subscribe_requests)
 {
   a_subscribe_all_request_should_be_sent(request_id(0), address(0x54), retain(false));
   after_subscribe_is_requested(address(0x54));
@@ -1144,7 +1144,7 @@ TEST(tiny_erd_client, should_ignore_duplicate_subscribe_requests)
   after_a_subscribe_all_response_is_received(request_id(0), address(0x54), successful(true));
 }
 
-TEST(tiny_erd_client, should_ignore_duplicate_retain_subscription_requests)
+TEST(tiny_gea3_erd_client, should_ignore_duplicate_retain_subscription_requests)
 {
   a_subscribe_all_request_should_be_sent(request_id(0), address(0x54), retain(true));
   after_retain_subscription_is_requested(address(0x54));
@@ -1154,13 +1154,13 @@ TEST(tiny_erd_client, should_ignore_duplicate_retain_subscription_requests)
   after_a_subscribe_all_response_is_received(request_id(0), address(0x54), successful(true));
 }
 
-TEST(tiny_erd_client, should_ignore_responses_when_there_are_no_active_requests)
+TEST(tiny_gea3_erd_client, should_ignore_responses_when_there_are_no_active_requests)
 {
   nothing_should_happen();
   after_a_read_response_is_received(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
 }
 
-TEST(tiny_erd_client, should_allow_a_new_read_request_in_read_request_complete_callback)
+TEST(tiny_gea3_erd_client, should_allow_a_new_read_request_in_read_request_complete_callback)
 {
   given_that_the_client_will_request_again_on_complete_or_failed();
 
@@ -1172,19 +1172,19 @@ TEST(tiny_erd_client, should_allow_a_new_read_request_in_read_request_complete_c
   after_a_read_response_is_received(request_id(0), address(0x54), erd(0x1234), (uint8_t)123);
 }
 
-TEST(tiny_erd_client, should_allow_a_new_read_request_in_read_request_failed_callback)
+TEST(tiny_gea3_erd_client, should_allow_a_new_read_request_in_read_request_failed_callback)
 {
   given_that_the_client_will_request_again_on_complete_or_failed();
 
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
 
-  should_publish_read_failed(address(0x54), erd(0x1234), tiny_erd_client_read_failure_reason_not_supported);
+  should_publish_read_failed(address(0x54), erd(0x1234), tiny_gea3_erd_client_read_failure_reason_not_supported);
   a_read_request_should_be_sent(request_id(1), address(0x54), erd(0x1234));
   after_a_read_failure_response_is_received(request_id(0), address(0x54), erd(0x1234), tiny_gea3_erd_api_read_result_unsupported_erd);
 }
 
-TEST(tiny_erd_client, should_allow_a_new_write_request_in_write_request_complete_callback)
+TEST(tiny_gea3_erd_client, should_allow_a_new_write_request_in_write_request_complete_callback)
 {
   given_that_the_client_will_request_again_on_complete_or_failed();
 
@@ -1196,7 +1196,7 @@ TEST(tiny_erd_client, should_allow_a_new_write_request_in_write_request_complete
   after_a_write_response_is_received(request_id(0), address(0x54), erd(0x1234), tiny_gea3_erd_api_write_result_success);
 }
 
-TEST(tiny_erd_client, should_allow_a_new_write_request_in_write_request_failed_callback)
+TEST(tiny_gea3_erd_client, should_allow_a_new_write_request_in_write_request_failed_callback)
 {
   given_that_the_client_will_request_again_on_complete_or_failed();
 
@@ -1208,7 +1208,7 @@ TEST(tiny_erd_client, should_allow_a_new_write_request_in_write_request_failed_c
   after_a_write_response_is_received(request_id(0), address(0x54), erd(0x1234), tiny_gea3_erd_api_write_result_incorrect_size);
 }
 
-TEST(tiny_erd_client, should_allow_a_new_subscribe_request_in_subscribe_complete_callback)
+TEST(tiny_gea3_erd_client, should_allow_a_new_subscribe_request_in_subscribe_complete_callback)
 {
   given_that_the_client_will_request_again_on_complete_or_failed();
 
@@ -1220,7 +1220,7 @@ TEST(tiny_erd_client, should_allow_a_new_subscribe_request_in_subscribe_complete
   after_a_subscribe_all_response_is_received(request_id(0), address(0x54), successful(true));
 }
 
-TEST(tiny_erd_client, should_allow_a_new_subscribe_request_in_subscribe_failed_callback)
+TEST(tiny_gea3_erd_client, should_allow_a_new_subscribe_request_in_subscribe_failed_callback)
 {
   given_that_the_client_will_request_again_on_complete_or_failed();
 
@@ -1232,7 +1232,7 @@ TEST(tiny_erd_client, should_allow_a_new_subscribe_request_in_subscribe_failed_c
   after_a_subscribe_all_response_is_received(request_id(0), address(0x54), successful(false));
 }
 
-TEST(tiny_erd_client, should_provide_request_ids_for_read_requests)
+TEST(tiny_gea3_erd_client, should_provide_request_ids_for_read_requests)
 {
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
@@ -1252,11 +1252,11 @@ TEST(tiny_erd_client, should_provide_request_ids_for_read_requests)
   a_read_request_should_be_sent(request_id(2), address(0x56), erd(0xABCD));
   after_a_read_response_is_received(request_id(1), address(0x56), erd(0x5678), (uint8_t)21);
 
-  and_then should_publish_read_failed(address(0x56), erd(0xABCD), request_id(2), tiny_erd_client_read_failure_reason_not_supported);
+  and_then should_publish_read_failed(address(0x56), erd(0xABCD), request_id(2), tiny_gea3_erd_client_read_failure_reason_not_supported);
   after_a_read_failure_response_is_received(request_id(2), address(0x56), erd(0xABCD), tiny_gea3_erd_api_read_result_unsupported_erd);
 }
 
-TEST(tiny_erd_client, should_provide_the_same_request_id_for_duplicate_read_requests)
+TEST(tiny_gea3_erd_client, should_provide_the_same_request_id_for_duplicate_read_requests)
 {
   a_read_request_should_be_sent(request_id(0), address(0x54), erd(0x1234));
   after_a_read_is_requested(address(0x54), erd(0x1234));
@@ -1279,7 +1279,7 @@ TEST(tiny_erd_client, should_provide_the_same_request_id_for_duplicate_read_requ
   with_an_expected_request_id(1);
 }
 
-TEST(tiny_erd_client, should_provide_request_ids_for_write_requests)
+TEST(tiny_gea3_erd_client, should_provide_request_ids_for_write_requests)
 {
   a_write_request_should_be_sent(request_id(0), address(0x56), erd(0xABCD), (uint8_t)42);
   after_a_write_is_requested(address(0x56), erd(0xABCD), (uint8_t)42);
@@ -1295,7 +1295,7 @@ TEST(tiny_erd_client, should_provide_request_ids_for_write_requests)
   after_a_write_is_requested(address(0x56), erd(0x1234), (uint8_t)7);
   with_an_expected_request_id(2);
 
-  and_then should_publish_write_failed(address(0x56), erd(0x5678), (uint8_t)21, request_id(1), tiny_erd_client_write_failure_reason_incorrect_size);
+  and_then should_publish_write_failed(address(0x56), erd(0x5678), (uint8_t)21, request_id(1), tiny_gea3_erd_client_write_failure_reason_incorrect_size);
   a_write_request_should_be_sent(request_id(2), address(0x56), erd(0x1234), (uint8_t)7);
   after_a_write_response_is_received(request_id(1), address(0x56), erd(0x5678), tiny_gea3_erd_api_write_result_incorrect_size);
 
@@ -1303,7 +1303,7 @@ TEST(tiny_erd_client, should_provide_request_ids_for_write_requests)
   after_a_write_response_is_received(request_id(2), address(0x56), erd(0x1234), tiny_gea3_erd_api_write_result_success);
 }
 
-TEST(tiny_erd_client, should_provide_the_same_request_id_for_duplicate_write_requests)
+TEST(tiny_gea3_erd_client, should_provide_the_same_request_id_for_duplicate_write_requests)
 {
   a_write_request_should_be_sent(request_id(0), address(0x56), erd(0xABCD), (uint8_t)42);
   after_a_write_is_requested(address(0x56), erd(0xABCD), (uint8_t)42);
