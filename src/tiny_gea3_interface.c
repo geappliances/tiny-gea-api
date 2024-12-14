@@ -121,15 +121,15 @@ static void byte_received(void* context, const void* _args)
   }
 }
 
-static bool determine_byte_to_send_considering_escapes(self_t* self, uint8_t byte, uint8_t* byteToSend)
+static bool determine_byte_to_send_considering_escapes(self_t* self, uint8_t byte, uint8_t* byte_to_send)
 {
   if(!self->send_escaped && needs_escape(byte)) {
     self->send_escaped = true;
-    *byteToSend = tiny_gea_esc;
+    *byte_to_send = tiny_gea_esc;
   }
   else {
     self->send_escaped = false;
-    *byteToSend = byte;
+    *byte_to_send = byte;
   }
 
   return !self->send_escaped;
@@ -137,9 +137,9 @@ static bool determine_byte_to_send_considering_escapes(self_t* self, uint8_t byt
 
 static void prepare_buffered_packet_for_transmission(self_t* self)
 {
-  reinterpret(sendPacket, self->send_buffer, send_packet_t*);
-  sendPacket->data_length += tiny_gea_packet_transmission_overhead;
-  self->send_crc = tiny_crc16_block(tiny_gea_crc_seed, (const uint8_t*)sendPacket, sendPacket->data_length - data_length_bytes_not_included_in_data);
+  reinterpret(send_packet, self->send_buffer, send_packet_t*);
+  send_packet->data_length += tiny_gea_packet_transmission_overhead;
+  self->send_crc = tiny_crc16_block(tiny_gea_crc_seed, (const uint8_t*)send_packet, send_packet->data_length - data_length_bytes_not_included_in_data);
   self->send_state = send_state_data;
   self->send_offset = 0;
 }
@@ -160,41 +160,41 @@ static void byte_sent(void* context, const void* args)
     return;
   }
 
-  uint8_t byteToSend = 0;
+  uint8_t byte_to_send = 0;
 
   switch(self->send_state) {
     case send_state_data:
-      if(determine_byte_to_send_considering_escapes(self, self->send_buffer[self->send_offset], &byteToSend)) {
-        reinterpret(sendPacket, self->send_buffer, const send_packet_t*);
+      if(determine_byte_to_send_considering_escapes(self, self->send_buffer[self->send_offset], &byte_to_send)) {
+        reinterpret(send_packet, self->send_buffer, const send_packet_t*);
         self->send_offset++;
 
-        if(self->send_offset >= sendPacket->data_length - data_length_bytes_not_included_in_data) {
+        if(self->send_offset >= send_packet->data_length - data_length_bytes_not_included_in_data) {
           self->send_state = send_state_crc_msb;
         }
       }
       break;
 
     case send_state_crc_msb:
-      byteToSend = self->send_crc >> 8;
-      if(determine_byte_to_send_considering_escapes(self, byteToSend, &byteToSend)) {
+      byte_to_send = self->send_crc >> 8;
+      if(determine_byte_to_send_considering_escapes(self, byte_to_send, &byte_to_send)) {
         self->send_state = send_state_crc_lsb;
       }
       break;
 
     case send_state_crc_lsb:
-      byteToSend = self->send_crc;
-      if(determine_byte_to_send_considering_escapes(self, byteToSend, &byteToSend)) {
+      byte_to_send = self->send_crc;
+      if(determine_byte_to_send_considering_escapes(self, byte_to_send, &byte_to_send)) {
         self->send_state = send_state_etx;
       }
       break;
 
     case send_state_etx:
       self->send_in_progress = false;
-      byteToSend = tiny_gea_etx;
+      byte_to_send = tiny_gea_etx;
       break;
   }
 
-  tiny_uart_send(self->uart, byteToSend);
+  tiny_uart_send(self->uart, byte_to_send);
 }
 
 static void populate_send_packet(
@@ -204,11 +204,11 @@ static void populate_send_packet(
   uint8_t payload_length,
   tiny_gea_interface_send_callback_t callback,
   void* context,
-  bool setSourceAddress)
+  bool set_source_address)
 {
   packet->payload_length = payload_length;
   callback(context, (tiny_gea_packet_t*)packet);
-  if(setSourceAddress) {
+  if(set_source_address) {
     packet->source = self->address;
   }
   packet->destination = destination;
@@ -220,7 +220,7 @@ static bool send_worker(
   uint8_t payload_length,
   tiny_gea_interface_send_callback_t callback,
   void* context,
-  bool setSourceAddress)
+  bool set_source_address)
 {
   reinterpret(self, _self, self_t*);
 
@@ -230,14 +230,14 @@ static bool send_worker(
 
   if(self->send_in_progress) {
     uint8_t buffer[255];
-    populate_send_packet(self, (tiny_gea_packet_t*)buffer, destination, payload_length, callback, context, setSourceAddress);
+    populate_send_packet(self, (tiny_gea_packet_t*)buffer, destination, payload_length, callback, context, set_source_address);
     if(!tiny_queue_enqueue(&self->send_queue, buffer, tiny_gea_packet_overhead + payload_length)) {
       return false;
     }
   }
   else {
-    reinterpret(sendPacket, self->send_buffer, tiny_gea_packet_t*);
-    populate_send_packet(self, sendPacket, destination, payload_length, callback, context, setSourceAddress);
+    reinterpret(send_packet, self->send_buffer, tiny_gea_packet_t*);
+    populate_send_packet(self, send_packet, destination, payload_length, callback, context, set_source_address);
     prepare_buffered_packet_for_transmission(self);
     self->send_in_progress = true;
     tiny_uart_send(self->uart, tiny_gea_stx);

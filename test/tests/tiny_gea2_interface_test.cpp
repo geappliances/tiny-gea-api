@@ -14,13 +14,14 @@ extern "C" {
 
 #include "CppUTest/TestHarness.h"
 #include "CppUTestExt/MockSupport.h"
-#include "double/tiny_time_source_double.hpp"
+#include "double/tiny_timer_group_double.hpp"
 #include "double/tiny_uart_double.hpp"
 #include "tiny_utils.h"
 
 enum {
   address = 0xAD,
   send_buffer_size = 10,
+  send_queue_size = 20,
   receive_buffer_size = 9,
   idle_cooldown_msec = 10 + (address & 0x1F),
   gea2_reflection_timeout_msec = 6,
@@ -34,12 +35,13 @@ enum {
 
 TEST_GROUP(tiny_gea2_interface)
 {
-  tiny_gea2_interface_t instance;
+  tiny_gea2_interface_t self;
   tiny_uart_double_t uart;
   tiny_event_subscription_t receiveSubscription;
   uint8_t send_buffer[send_buffer_size];
   uint8_t receive_buffer[receive_buffer_size];
-  tiny_time_source_double_t time_source;
+  uint8_t send_queue_buffer[send_queue_size];
+  tiny_timer_group_double_t timer_group;
   tiny_event_t msec_interrupt;
 
   void setup()
@@ -47,55 +49,61 @@ TEST_GROUP(tiny_gea2_interface)
     tiny_event_init(&msec_interrupt);
 
     tiny_uart_double_init(&uart);
-    tiny_time_source_double_init(&time_source);
+    tiny_timer_group_double_init(&timer_group);
 
     tiny_gea2_interface_init(
-      &instance,
+      &self,
       &uart.interface,
-      &time_source.interface,
+      &timer_group.timer_group,
       &msec_interrupt.interface,
-      receive_buffer,
-      receive_buffer_size,
-      send_buffer,
-      send_buffer_size,
       address,
+      send_buffer,
+      sizeof(send_buffer),
+      receive_buffer,
+      sizeof(receive_buffer),
+      send_queue_buffer,
+      sizeof(send_queue_buffer),
       false,
       default_retries);
 
     tiny_event_subscription_init(&receiveSubscription, NULL, packet_received);
-    tiny_event_subscribe(tiny_gea_interface_on_receive(&instance.interface), &receiveSubscription);
+    tiny_event_subscribe(tiny_gea_interface_on_receive(&self.interface), &receiveSubscription);
   }
 
   void given_that_ignore_destination_address_is_enabled()
   {
     tiny_gea2_interface_init(
-      &instance,
+      &self,
       &uart.interface,
-      &time_source.interface,
+      &timer_group.timer_group,
       &msec_interrupt.interface,
-      receive_buffer,
-      receive_buffer_size,
-      send_buffer,
-      send_buffer_size,
       address,
+      send_buffer,
+      sizeof(send_buffer),
+      receive_buffer,
+      sizeof(receive_buffer),
+      send_queue_buffer,
+      sizeof(send_queue_buffer),
       true,
       default_retries);
 
-    tiny_event_subscribe(tiny_gea_interface_on_receive(&instance.interface), &receiveSubscription);
+    tiny_event_subscribe(tiny_gea_interface_on_receive(&self.interface), &receiveSubscription);
   }
 
   void given_that_retries_have_been_set_to(uint8_t retries)
   {
     tiny_gea2_interface_init(
-      &instance,
+      &self,
       &uart.interface,
-      &time_source.interface,
+      &timer_group.timer_group,
       &msec_interrupt.interface,
-      receive_buffer,
-      receive_buffer_size,
-      send_buffer,
-      send_buffer_size,
       address,
+      send_buffer,
+      sizeof(send_buffer),
+      receive_buffer,
+      sizeof(receive_buffer),
+      send_queue_buffer,
+      sizeof(send_queue_buffer),
       false,
       retries);
   }
@@ -161,7 +169,7 @@ TEST_GROUP(tiny_gea2_interface)
 
   void after_the_interface_is_run()
   {
-    tiny_gea2_interface_run(&instance);
+    tiny_gea2_interface_run(&self);
   }
 
   void nothing_should_happen()
@@ -171,7 +179,7 @@ TEST_GROUP(tiny_gea2_interface)
   void after(tiny_time_source_ticks_t ticks)
   {
     for(uint32_t i = 0; i < ticks; i++) {
-      tiny_time_source_double_tick(&time_source, 1);
+      tiny_timer_group_double_elapse_time(&timer_group, 1);
       after_msec_interrupt_fires();
     }
   }
@@ -202,13 +210,20 @@ TEST_GROUP(tiny_gea2_interface)
 
   void when_packet_is_sent(tiny_gea_packet_t * packet)
   {
-    tiny_gea_interface_send(&instance.interface, packet->destination, packet->payload_length, packet, send_callback);
+    tiny_gea_interface_send(&self.interface, packet->destination, packet->payload_length, packet, send_callback);
+    after_msec_interrupt_fires();
+  }
+
+  void when_packets_are_sent(tiny_gea_packet_t * packet_1, tiny_gea_packet_t * packet_2)
+  {
+    tiny_gea_interface_send(&self.interface, packet_1->destination, packet_1->payload_length, packet_1, send_callback);
+    tiny_gea_interface_send(&self.interface, packet_2->destination, packet_2->payload_length, packet_2, send_callback);
     after_msec_interrupt_fires();
   }
 
   void when_packet_is_forwarded(tiny_gea_packet_t * packet)
   {
-    tiny_gea_interface_forward(&instance.interface, packet->destination, packet->payload_length, packet, send_callback);
+    tiny_gea_interface_forward(&self.interface, packet->destination, packet->payload_length, packet, send_callback);
     after_msec_interrupt_fires();
   }
 
@@ -343,7 +358,7 @@ TEST_GROUP(tiny_gea2_interface)
 
   tiny_time_source_ticks_t collision_timeout_msec()
   {
-    return 43 + (address & 0x1F) + ((time_source.ticks ^ address) & 0x1F);
+    return 43 + (address & 0x1F) + ((timer_group.time_source.ticks ^ address) & 0x1F);
   }
 
   void after_msec_interrupt_fires()
@@ -1168,19 +1183,42 @@ TEST(tiny_gea2_interface, should_stop_sending_when_an_unexpected_byte_is_receive
   should_be_able_to_send_a_message_after_collision_cooldown();
 }
 
-TEST(tiny_gea2_interface, should_ignore_send_requests_when_already_sending)
+TEST(tiny_gea2_interface, should_queue_send_requests_when_already_sending)
 {
-  should_send_bytes_via_uart(tiny_gea_stx);
-  tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
-  packet->destination = 0x45;
-  when_packet_is_sent(packet);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
+  packet->destination = 0xFF;
+  packet->payload[0] = 0xD5;
 
-  tiny_gea_STATIC_ALLOC_PACKET(differentPacket, 0);
-  packet->destination = 0x80;
-  when_packet_is_sent(differentPacket);
+  tiny_gea_STATIC_ALLOC_PACKET(another_packet, 1);
+  another_packet->destination = 0xFF;
+  another_packet->payload[0] = 0x42;
 
-  should_send_bytes_via_uart(0x45);
-  after_bytes_are_received_via_uart(tiny_gea_stx);
+  given_uart_echoing_is_enabled();
+
+  should_send_bytes_via_uart(
+    tiny_gea_stx,
+    0xFF, // dst
+    0x08, // len
+    address, // src
+    0xD5, // payload
+    0xB8, // crc
+    0xA9,
+    tiny_gea_etx);
+  when_packets_are_sent(packet, another_packet);
+
+  should_send_bytes_via_uart(
+    tiny_gea_stx,
+    0xFF, // dst
+    0x08, // len
+    address, // src
+    0x42, // payload
+    0x4B, // crc
+    0xF7,
+    tiny_gea_etx);
+  after(100);
+
+  nothing_should_happen();
+  after(100);
 }
 
 TEST(tiny_gea2_interface, should_retry_a_message_if_no_ack_is_received)
