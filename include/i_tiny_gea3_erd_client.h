@@ -1,6 +1,6 @@
 /*!
  * @file
- * @brief Interface for acting as an ERD client. Supports reads, writes, and subscriptions.
+ * @brief Interface for acting as a GEA3 ERD client. Supports reads, writes, and subscriptions.
  */
 
 #ifndef i_tiny_gea3_erd_client_h
@@ -159,8 +159,7 @@ static inline bool tiny_gea3_erd_client_retain_subscription(i_tiny_gea3_erd_clie
 }
 
 /*!
- * Event that is raised when a read, write, subscribe request is received, when a
- * request fails, and when a subscription host comes online.
+ * Event that is raised when a read, write, subscribe request completes and when a subscription host comes online.
  */
 static inline i_tiny_event_t* tiny_gea3_erd_client_on_activity(i_tiny_gea3_erd_client_t* self)
 {

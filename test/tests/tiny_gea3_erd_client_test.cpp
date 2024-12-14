@@ -12,7 +12,7 @@ extern "C" {
 
 #include "CppUTest/TestHarness.h"
 #include "CppUTestExt/MockSupport.h"
-#include "double/tiny_gea3_interface_double.hpp"
+#include "double/tiny_gea_interface_double.hpp"
 #include "double/tiny_timer_group_double.hpp"
 
 enum {
@@ -46,7 +46,7 @@ TEST_GROUP(tiny_gea3_erd_client)
   tiny_event_subscription_t activity_subscription;
   tiny_event_subscription_t request_again_on_request_complete_or_failed_subscription;
   tiny_timer_group_double_t timer_group;
-  tiny_gea3_interface_double_t gea3_interface;
+  tiny_gea_interface_double_t gea3_interface;
   uint8_t queue_buffer[25];
 
   static void on_activity(void*, const void* _args)
@@ -208,7 +208,7 @@ TEST_GROUP(tiny_gea3_erd_client)
 
   void setup()
   {
-    tiny_gea3_interface_double_init(&gea3_interface, endpoint_address);
+    tiny_gea_interface_double_init(&gea3_interface, endpoint_address);
     tiny_timer_group_double_init(&timer_group);
 
     memset(&self, 0xA5, sizeof(self));
@@ -318,7 +318,7 @@ TEST_GROUP(tiny_gea3_erd_client)
     packet->payload[5] = sizeof(data);
     packet->payload[6] = data;
 
-    tiny_gea3_interface_double_trigger_receive(&gea3_interface, packet);
+    tiny_gea_interface_double_trigger_receive(&gea3_interface, packet);
   }
 
   void after_a_read_response_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, tiny_erd_t erd, uint16_t data)
@@ -335,7 +335,7 @@ TEST_GROUP(tiny_gea3_erd_client)
     packet->payload[6] = data >> 8;
     packet->payload[7] = data & 0xFF;
 
-    tiny_gea3_interface_double_trigger_receive(&gea3_interface, packet);
+    tiny_gea_interface_double_trigger_receive(&gea3_interface, packet);
   }
 
   void after_a_read_failure_response_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, tiny_erd_t erd, tiny_gea3_erd_api_read_result_t result)
@@ -349,7 +349,7 @@ TEST_GROUP(tiny_gea3_erd_client)
     packet->payload[3] = erd >> 8;
     packet->payload[4] = erd & 0xFF;
 
-    tiny_gea3_interface_double_trigger_receive(&gea3_interface, packet);
+    tiny_gea_interface_double_trigger_receive(&gea3_interface, packet);
   }
 
   void after_a_write_response_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, tiny_erd_t erd, tiny_gea3_erd_api_write_result_t result)
@@ -363,7 +363,7 @@ TEST_GROUP(tiny_gea3_erd_client)
     packet->payload[3] = erd >> 8;
     packet->payload[4] = erd & 0xFF;
 
-    tiny_gea3_interface_double_trigger_receive(&gea3_interface, packet);
+    tiny_gea_interface_double_trigger_receive(&gea3_interface, packet);
   }
 
   void after_a_malformed_write_response_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, tiny_erd_t erd, tiny_gea3_erd_api_write_result_t result)
@@ -377,7 +377,7 @@ TEST_GROUP(tiny_gea3_erd_client)
     packet->payload[3] = erd >> 8;
     packet->payload[4] = erd & 0xFF;
 
-    tiny_gea3_interface_double_trigger_receive(&gea3_interface, packet);
+    tiny_gea_interface_double_trigger_receive(&gea3_interface, packet);
   }
 
   void after_a_subscribe_all_response_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, bool successful)
@@ -389,7 +389,7 @@ TEST_GROUP(tiny_gea3_erd_client)
     packet->payload[1] = request_id;
     packet->payload[2] = successful ? tiny_gea3_erd_api_subscribe_all_result_success : tiny_gea3_erd_api_subscribe_all_result_no_available_subscriptions;
 
-    tiny_gea3_interface_double_trigger_receive(&gea3_interface, packet);
+    tiny_gea_interface_double_trigger_receive(&gea3_interface, packet);
   }
 
   void after_a_subscription_publication_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, uint8_t context, tiny_erd_t erd, uint8_t data)
@@ -406,7 +406,7 @@ TEST_GROUP(tiny_gea3_erd_client)
     packet->payload[6] = sizeof(data);
     packet->payload[7] = data;
 
-    tiny_gea3_interface_double_trigger_receive(&gea3_interface, packet);
+    tiny_gea_interface_double_trigger_receive(&gea3_interface, packet);
   }
 
   void after_a_subscription_publication_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, uint8_t context, tiny_erd_t erd, uint16_t data)
@@ -424,7 +424,7 @@ TEST_GROUP(tiny_gea3_erd_client)
     packet->payload[7] = data >> 8;
     packet->payload[8] = data & 0xFF;
 
-    tiny_gea3_interface_double_trigger_receive(&gea3_interface, packet);
+    tiny_gea_interface_double_trigger_receive(&gea3_interface, packet);
   }
 
   void after_a_subscription_publication_is_received(tiny_gea3_erd_api_request_id_t request_id, uint8_t address, uint8_t context, tiny_erd_t erd1, uint8_t data1, tiny_erd_t erd2, uint16_t data2)
@@ -446,7 +446,7 @@ TEST_GROUP(tiny_gea3_erd_client)
     packet->payload[11] = data2 >> 8;
     packet->payload[12] = data2 & 0xFF;
 
-    tiny_gea3_interface_double_trigger_receive(&gea3_interface, packet);
+    tiny_gea_interface_double_trigger_receive(&gea3_interface, packet);
   }
 
   void after_a_subscription_host_startup_is_received(uint8_t address)
@@ -456,7 +456,7 @@ TEST_GROUP(tiny_gea3_erd_client)
     packet->destination = endpoint_address;
     packet->payload[0] = tiny_gea3_erd_api_command_subscription_host_startup;
 
-    tiny_gea3_interface_double_trigger_receive(&gea3_interface, packet);
+    tiny_gea_interface_double_trigger_receive(&gea3_interface, packet);
   }
 
   void after(tiny_timer_ticks_t ticks)
