@@ -12,17 +12,7 @@
 
 typedef tiny_gea3_interface_t self_t;
 
-// Send packet should match tiny_gea_packet_t, but stores data_length (per spec) instead of payload_length
-// (used application convenience)
-typedef struct {
-  uint8_t destination;
-  uint8_t data_length;
-  uint8_t source;
-  uint8_t data[1];
-} send_packet_t;
-
 enum {
-  send_packet_header_size = offsetof(send_packet_t, data),
   data_length_bytes_not_included_in_data = tiny_gea_packet_transmission_overhead - tiny_gea_packet_overhead,
   crc_size = sizeof(uint16_t),
   packet_bytes_not_included_in_payload = crc_size + offsetof(tiny_gea_packet_t, payload),
@@ -142,7 +132,7 @@ static bool determine_byte_to_send_considering_escapes(self_t* self, uint8_t byt
 
 static void begin_send(self_t* self)
 {
-  tiny_queue_peek_partial(&self->send_queue, &self->send_data_length, sizeof(self->send_data_length), offsetof(send_packet_t, data_length), 0);
+  tiny_queue_peek_partial(&self->send_queue, &self->send_data_length, sizeof(self->send_data_length), offsetof(tiny_gea_packet_t, payload_length), 0);
   self->send_crc = tiny_gea_crc_seed;
   self->send_state = send_state_destination;
   self->send_offset = 0;
@@ -279,7 +269,7 @@ static bool send_worker(
     .queued = false
   };
   tiny_stack_allocator_allocate_aligned(
-    sizeof(send_packet_t) + payload_length,
+    sizeof(tiny_gea_packet_t) + payload_length,
     &send_worker_context,
     send_worker_callback);
 

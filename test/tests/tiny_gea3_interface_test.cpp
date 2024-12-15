@@ -21,7 +21,6 @@ TEST_GROUP(tiny_gea3_interface)
   enum {
     address = 0xAD,
 
-    send_buffer_size = 10,
     receive_buffer_size = 9,
     send_queue_size = 20
   };

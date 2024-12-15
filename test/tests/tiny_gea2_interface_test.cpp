@@ -14,13 +14,12 @@ extern "C" {
 
 #include "CppUTest/TestHarness.h"
 #include "CppUTestExt/MockSupport.h"
-#include "double/tiny_timer_group_double.hpp"
+#include "double/tiny_time_source_double.hpp"
 #include "double/tiny_uart_double.hpp"
 #include "tiny_utils.h"
 
 enum {
   address = 0xAD,
-  send_buffer_size = 10,
   send_queue_size = 20,
   receive_buffer_size = 9,
   idle_cooldown_msec = 10 + (address & 0x1F),
@@ -38,10 +37,9 @@ TEST_GROUP(tiny_gea2_interface)
   tiny_gea2_interface_t self;
   tiny_uart_double_t uart;
   tiny_event_subscription_t receiveSubscription;
-  uint8_t send_buffer[send_buffer_size];
   uint8_t receive_buffer[receive_buffer_size];
   uint8_t send_queue_buffer[send_queue_size];
-  tiny_timer_group_double_t timer_group;
+  tiny_time_source_double_t time_source;
   tiny_event_t msec_interrupt;
 
   void setup()
@@ -49,16 +47,14 @@ TEST_GROUP(tiny_gea2_interface)
     tiny_event_init(&msec_interrupt);
 
     tiny_uart_double_init(&uart);
-    tiny_timer_group_double_init(&timer_group);
+    tiny_time_source_double_init(&time_source);
 
     tiny_gea2_interface_init(
       &self,
       &uart.interface,
-      &timer_group.timer_group,
+      &time_source.interface,
       &msec_interrupt.interface,
       address,
-      send_buffer,
-      sizeof(send_buffer),
       receive_buffer,
       sizeof(receive_buffer),
       send_queue_buffer,
@@ -75,11 +71,9 @@ TEST_GROUP(tiny_gea2_interface)
     tiny_gea2_interface_init(
       &self,
       &uart.interface,
-      &timer_group.timer_group,
+      &time_source.interface,
       &msec_interrupt.interface,
       address,
-      send_buffer,
-      sizeof(send_buffer),
       receive_buffer,
       sizeof(receive_buffer),
       send_queue_buffer,
@@ -95,11 +89,9 @@ TEST_GROUP(tiny_gea2_interface)
     tiny_gea2_interface_init(
       &self,
       &uart.interface,
-      &timer_group.timer_group,
+      &time_source.interface,
       &msec_interrupt.interface,
       address,
-      send_buffer,
-      sizeof(send_buffer),
       receive_buffer,
       sizeof(receive_buffer),
       send_queue_buffer,
@@ -179,12 +171,12 @@ TEST_GROUP(tiny_gea2_interface)
   void after(tiny_time_source_ticks_t ticks)
   {
     for(uint32_t i = 0; i < ticks; i++) {
-      tiny_timer_group_double_elapse_time(&timer_group, 1);
+      tiny_time_source_double_tick(&time_source, 1);
       after_msec_interrupt_fires();
     }
   }
 
-  void given_the_module_is_in_cooldown_after_receiving_a_message()
+  void given_the_module_is_in_cooldown_after_receiving_a_packet()
   {
     mock().disable();
     after_bytes_are_received_via_uart(
@@ -237,7 +229,7 @@ TEST_GROUP(tiny_gea2_interface)
     when_packet_is_sent(packet);
   }
 
-  void gjven_that_a_packet_has_been_sent()
+  void given_that_a_packet_has_been_sent()
   {
     given_uart_echoing_is_enabled();
 
@@ -308,7 +300,7 @@ TEST_GROUP(tiny_gea2_interface)
     after_bytes_are_received_via_uart(tiny_gea_ack);
   }
 
-  void should_be_able_to_send_a_message_after_idle_cooldown()
+  void should_be_able_to_send_a_packet_after_idle_cooldown()
   {
     given_uart_echoing_is_enabled();
     should_send_bytes_via_uart(
@@ -325,9 +317,11 @@ TEST_GROUP(tiny_gea2_interface)
     when_packet_is_sent(packet);
 
     after(idle_cooldown_msec);
+    after_the_interface_is_run();
+    after_msec_interrupt_fires();
   }
 
-  void should_be_able_to_send_a_message_after_collision_cooldown()
+  void should_be_able_to_send_a_packet_after_collision_cooldown()
   {
     given_uart_echoing_is_enabled();
     tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
@@ -344,6 +338,8 @@ TEST_GROUP(tiny_gea2_interface)
       tiny_gea_etx);
 
     after(collision_timeout_msec());
+    after_the_interface_is_run();
+    after_msec_interrupt_fires();
   }
 
   void given_the_module_is_in_collision_cooldown()
@@ -358,7 +354,7 @@ TEST_GROUP(tiny_gea2_interface)
 
   tiny_time_source_ticks_t collision_timeout_msec()
   {
-    return 43 + (address & 0x1F) + ((timer_group.time_source.ticks ^ address) & 0x1F);
+    return 43 + (address & 0x1F) + ((time_source.ticks ^ address) & 0x1F);
   }
 
   void after_msec_interrupt_fires()
@@ -513,26 +509,6 @@ TEST(tiny_gea2_interface, should_receive_broadcast_packets)
 
   tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = 0xFF;
-  packet->source = 0x45;
-  packet->payload[0] = 0xBF;
-  packet_should_be_received(packet);
-  after_the_interface_is_run();
-}
-
-TEST(tiny_gea2_interface, should_receive_product_line_specific_broadcast_packets)
-{
-  after_bytes_are_received_via_uart(
-    tiny_gea_stx,
-    0xF3, // dst
-    0x08, // len
-    0x45, // src
-    0xBF, // payload
-    0xA3, // crc
-    0x6C,
-    tiny_gea_etx);
-
-  tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
-  packet->destination = 0xF3;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
   packet_should_be_received(packet);
@@ -806,7 +782,7 @@ TEST(tiny_gea2_interface, should_not_receive_a_packet_in_idle_if_the_packet_does
 
 TEST(tiny_gea2_interface, should_not_receive_a_packet_in_idle_cooldown_if_the_packet_does_not_start_with_stx)
 {
-  given_the_module_is_in_cooldown_after_receiving_a_message();
+  given_the_module_is_in_cooldown_after_receiving_a_packet();
 
   nothing_should_happen();
   after_bytes_are_received_via_uart(
@@ -908,11 +884,11 @@ TEST(tiny_gea2_interface, should_raise_a_packet_sent_event_when_a_packet_is_sent
   when_packet_is_sent(packet);
 }
 
-TEST(tiny_gea2_interface, should_not_send_a_packet_that_is_too_large_for_the_send_buffer)
+TEST(tiny_gea2_interface, should_not_send_a_packet_that_is_too_large_for_the_send_queue)
 {
   given_uart_echoing_is_enabled();
 
-  tiny_gea_STATIC_ALLOC_PACKET(packet, 8);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 16);
 
   when_packet_is_sent(packet);
 }
@@ -1034,35 +1010,35 @@ TEST(tiny_gea2_interface, should_forward_a_packet_with_max_payload_given_send_bu
   when_packet_is_forwarded(packet);
 }
 
-TEST(tiny_gea2_interface, should_not_forward_packets_that_are_too_large_to_be_buffered)
+TEST(tiny_gea2_interface, should_not_forward_packets_that_are_too_large_to_be_queued)
 {
   given_uart_echoing_is_enabled();
 
-  tiny_gea_STATIC_ALLOC_PACKET(packet, 8);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 16);
 
   when_packet_is_forwarded(packet);
 }
 
-TEST(tiny_gea2_interface, should_be_able_to_send_back_broadcasts_without_an_ack)
+TEST(tiny_gea2_interface, should_be_able_to_send_broadcasts_packets_without_waiting_for_an_ack)
 {
   given_uart_echoing_is_enabled();
 
   given_that_a_broadcast_packet_has_been_sent();
-  should_be_able_to_send_a_message_after_idle_cooldown();
+  should_be_able_to_send_a_packet_after_idle_cooldown();
 }
 
 TEST(tiny_gea2_interface, should_wait_until_the_idle_cool_down_time_has_expired_before_sending_a_packet)
 {
   given_uart_echoing_is_enabled();
 
-  given_the_module_is_in_cooldown_after_receiving_a_message();
+  given_the_module_is_in_cooldown_after_receiving_a_packet();
 
   nothing_should_happen();
   tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
   packet->destination = 0x45;
   when_packet_is_sent(packet);
 
-  should_be_able_to_send_a_message_after_idle_cooldown();
+  should_be_able_to_send_a_packet_after_idle_cooldown();
 }
 
 TEST(tiny_gea2_interface, should_retry_sending_when_the_reflection_timeout_violation_occurs_and_stop_after_retries_are_exhausted)
@@ -1095,10 +1071,10 @@ TEST(tiny_gea2_interface, should_retry_sending_when_the_reflection_timeout_viola
 
   after(1);
 
-  should_be_able_to_send_a_message_after_idle_cooldown();
+  should_be_able_to_send_a_packet_after_idle_cooldown();
 }
 
-TEST(tiny_gea2_interface, should_raise_reflection_timed_out_diagnostics_event_when_a_reflection_timeout_retry_sending_when_the_reflection_timeout_violation_occurs_and_stop_after_retrries_are_exhausted)
+TEST(tiny_gea2_interface, should_raise_reflection_timed_out_diagnostics_event_when_a_reflection_timeout_retry_sending_when_the_reflection_timeout_violation_occurs_and_stop_after_retries_are_exhausted)
 {
   should_send_bytes_via_uart(tiny_gea_stx);
   tiny_gea_STATIC_ALLOC_PACKET(packet, 0);
@@ -1133,7 +1109,7 @@ TEST(tiny_gea2_interface, should_retry_sending_when_a_collision_occurs_and_stop_
 
   after_bytes_are_received_via_uart(tiny_gea_stx - 1);
 
-  should_be_able_to_send_a_message_after_collision_cooldown();
+  should_be_able_to_send_a_packet_after_collision_cooldown();
 }
 
 TEST(tiny_gea2_interface, should_retry_sending_when_a_collision_occurs_and_stop_after_retries_are_exhausted_with_a_custom_retry_count)
@@ -1155,12 +1131,12 @@ TEST(tiny_gea2_interface, should_retry_sending_when_a_collision_occurs_and_stop_
 
   after_bytes_are_received_via_uart(tiny_gea_stx - 1);
 
-  should_be_able_to_send_a_message_after_collision_cooldown();
+  should_be_able_to_send_a_packet_after_collision_cooldown();
 }
 
 TEST(tiny_gea2_interface, should_stop_sending_when_an_unexpected_byte_is_received_while_waiting_for_an_ack)
 {
-  gjven_that_a_packet_has_been_sent();
+  given_that_a_packet_has_been_sent();
 
   after_bytes_are_received_via_uart(tiny_gea_ack - 1);
 
@@ -1180,7 +1156,7 @@ TEST(tiny_gea2_interface, should_stop_sending_when_an_unexpected_byte_is_receive
 
   after_bytes_are_received_via_uart(tiny_gea_ack - 1);
 
-  should_be_able_to_send_a_message_after_collision_cooldown();
+  should_be_able_to_send_a_packet_after_collision_cooldown();
 }
 
 TEST(tiny_gea2_interface, should_queue_send_requests_when_already_sending)
@@ -1216,12 +1192,14 @@ TEST(tiny_gea2_interface, should_queue_send_requests_when_already_sending)
     0xF7,
     tiny_gea_etx);
   after(100);
+  after_the_interface_is_run();
 
   nothing_should_happen();
   after(100);
+  after_the_interface_is_run();
 }
 
-TEST(tiny_gea2_interface, should_retry_a_message_if_no_ack_is_received)
+TEST(tiny_gea2_interface, should_retry_a_packet_if_no_ack_is_received)
 {
   given_uart_echoing_is_enabled();
   should_send_bytes_via_uart(
@@ -1270,7 +1248,7 @@ TEST(tiny_gea2_interface, should_retry_a_message_if_no_ack_is_received)
 
   after(1);
 
-  should_be_able_to_send_a_message_after_collision_cooldown();
+  should_be_able_to_send_a_packet_after_collision_cooldown();
 }
 
 TEST(tiny_gea2_interface, should_successfully_receive_a_packet_while_in_collision_cooldown)
