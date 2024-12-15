@@ -49,9 +49,9 @@ typedef struct
     uint8_t offset;
     uint16_t crc;
     bool escaped;
-    bool in_progress;
-    volatile bool completed; // Set by ISR, cleared by background
-    volatile bool packet_queued_in_background; // Set by ISR, cleared by background
+    volatile bool in_progress; // Set and cleared by the non-ISR, read by the ISR
+    volatile bool completed; // Set by ISR, cleared by non-ISR
+    volatile bool packet_queued_in_background; // Set by ISR, cleared by non-ISR
     uint8_t expected_reflection;
     uint8_t retries;
     uint8_t data_length;
