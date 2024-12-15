@@ -13,6 +13,9 @@ Provides a simple interface for sending and receiving GEA2 serial packets on a h
 ### `tiny_gea3_erd_client`
 Provides a simple interface for reading and writing addressable data (ERDs) over a GEA3 serial interface.
 
+### `tiny_gea2_erd_client`
+Provides a simple interface for reading and writing addressable data (ERDs) over a GEA2 serial interface.
+
 ## Dev Environment
 1. Clone the repo
 2. Install Cpputest
