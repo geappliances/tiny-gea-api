@@ -1,6 +1,44 @@
 /*!
  * @file
  * @brief
+ *
+ * # Notes on Interrupt Safety
+ *
+ * Sending is interrupt-safe because the interrupt context only peeks from
+ * the first element of the queue and makes no changes to the queue. While
+ * sending, the non-interrupt context is free to add elements to the queue
+ * as long as it does not remove any elements from the queue or otherwise
+ * modify the first element in the queue. Only when the interrupt context
+ * is done sending a packet is an element removed from the queue and while
+ * this operation is pending the interrupt context is not free to begin
+ * sending any additional packets.
+ *
+ * The non-interrupt context sets the send.in_progress flag and clears
+ * the send.completed flag. While send.completed remains false, the first
+ * element of the queue is not modified.
+ *
+ * The interrupt context sets the send.completed flag to indicate that it
+ * is no longer reading from the queue. Until send.completed is false, it
+ * does not read from the queue.
+ *
+ * [Non-interrupt]                     [Interrupt]
+ *        |                                 |
+ *   queue packet                           |
+ *        |                                 |
+ *        |---                              |
+ *        |  | send.in_progress == true     |
+ *        |<--                              |
+ *        |                                 |
+ *        |--- send.in_progress = true ---->|
+ *        |                                 |
+ *        |                            send packet
+ *        |                                 |
+ *        |<------ send.completed = true ---|
+ *        |                                 |
+ *        |--- send.completed = false ----->|
+ *        |--- send.in_progress = false --->|
+ *        |                                 |
+ *       ...                               ...
  */
 
 #include <stdbool.h>
