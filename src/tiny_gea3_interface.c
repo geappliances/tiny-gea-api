@@ -7,6 +7,7 @@
 #include "tiny_crc16.h"
 #include "tiny_gea3_interface.h"
 #include "tiny_gea_constants.h"
+#include "tiny_stack_allocator.h"
 #include "tiny_utils.h"
 
 typedef tiny_gea3_interface_t self_t;
@@ -236,21 +237,29 @@ static void byte_sent(void* context, const void* args)
   tiny_uart_send(self->uart, byte_to_send);
 }
 
-static void populate_send_packet(
-  self_t* self,
-  tiny_gea_packet_t* packet,
-  uint8_t destination,
-  uint8_t payload_length,
-  tiny_gea_interface_send_callback_t callback,
-  void* context,
-  bool set_source_address)
+typedef struct {
+  self_t* self;
+  uint8_t destination;
+  uint8_t payload_length;
+  tiny_gea_interface_send_callback_t callback;
+  void* context;
+  bool set_source_address;
+  bool queued;
+} send_worker_context_t;
+
+static void send_worker_callback(void* _context, void* buffer)
 {
-  packet->payload_length = payload_length + tiny_gea_packet_transmission_overhead;
-  callback(context, (tiny_gea_packet_t*)packet);
-  if(set_source_address) {
-    packet->source = self->address;
+  send_worker_context_t* context = _context;
+  tiny_gea_packet_t* packet = buffer;
+
+  packet->payload_length = context->payload_length + tiny_gea_packet_transmission_overhead;
+  context->callback(context->context, packet);
+  if(context->set_source_address) {
+    packet->source = context->self->address;
   }
-  packet->destination = destination;
+  packet->destination = context->destination;
+
+  context->queued = tiny_queue_enqueue(&context->self->send_queue, buffer, tiny_gea_packet_overhead + context->payload_length);
 }
 
 static bool send_worker(
@@ -263,10 +272,21 @@ static bool send_worker(
 {
   reinterpret(self, _self, self_t*);
 
-  uint8_t buffer[255]; // fixme stack alloc
-  populate_send_packet(self, (tiny_gea_packet_t*)buffer, destination, payload_length, callback, context, set_source_address);
+  send_worker_context_t send_worker_context = {
+    .self = self,
+    .destination = destination,
+    .payload_length = payload_length,
+    .callback = callback,
+    .context = context,
+    .set_source_address = set_source_address,
+    .queued = false
+  };
+  tiny_stack_allocator_allocate_aligned(
+    sizeof(send_packet_t) + payload_length,
+    &send_worker_context,
+    send_worker_callback);
 
-  if(!tiny_queue_enqueue(&self->send_queue, buffer, tiny_gea_packet_overhead + payload_length)) {
+  if(!send_worker_context.queued) {
     return false;
   }
 
