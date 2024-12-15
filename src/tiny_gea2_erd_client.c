@@ -90,7 +90,7 @@ static void send_write_request_worker(void* context, tiny_gea_packet_t* packet)
   reinterpret(payload, packet->payload, tiny_gea2_erd_api_write_request_payload_t*);
 
   write_request_t request;
-  tiny_queue_peek_partial(&self->request_queue, &request, sizeof(request), 0);
+  tiny_queue_peek_partial(&self->request_queue, &request, sizeof(request), 0, 0);
 
   uint16_t size;
   tiny_queue_peek(&self->request_queue, packet->payload, &size, 0);
@@ -106,7 +106,7 @@ static void send_write_request_worker(void* context, tiny_gea_packet_t* packet)
 static void send_write_request(self_t* self)
 {
   write_request_t request;
-  tiny_queue_peek_partial(&self->request_queue, &request, sizeof(request), 0);
+  tiny_queue_peek_partial(&self->request_queue, &request, sizeof(request), 0, 0);
 
   tiny_gea_interface_send(
     self->gea2_interface,
@@ -150,7 +150,7 @@ static request_type_t request_type(self_t* self)
 {
   if(request_pending(self)) {
     request_t request;
-    tiny_queue_peek_partial(&self->request_queue, &request, sizeof(request), 0);
+    tiny_queue_peek_partial(&self->request_queue, &request, sizeof(request), 0, 0);
     return request.type;
   }
   else {
@@ -234,7 +234,7 @@ static void handle_write_failure_worker(void* _context, void* allocated_block)
 static void handle_write_failure(self_t* self)
 {
   write_request_t request;
-  tiny_queue_peek_partial(&self->request_queue, &request, offsetof(write_request_t, data), 0);
+  tiny_queue_peek_partial(&self->request_queue, &request, offsetof(write_request_t, data), 0, 0);
 
   tiny_stack_allocator_allocate_aligned(request.data_size + offsetof(write_request_t, data), self, handle_write_failure_worker);
 }
@@ -267,7 +267,7 @@ static void handle_read_response_packet(self_t* self, const tiny_gea_packet_t* p
 {
   if(request_type(self) == request_type_read) {
     read_request_t request;
-    tiny_queue_peek_partial(&self->request_queue, &request, sizeof(request), 0);
+    tiny_queue_peek_partial(&self->request_queue, &request, sizeof(request), 0, 0);
 
     if(packet->payload_length >= sizeof(tiny_gea2_erd_api_read_response_payload_t)) {
       reinterpret(payload, packet->payload, const tiny_gea2_erd_api_read_response_payload_t*);
@@ -323,7 +323,7 @@ static void handle_write_response_packet(self_t* self, const tiny_gea_packet_t* 
 {
   if(request_type(self) == request_type_write) {
     write_request_t request;
-    tiny_queue_peek_partial(&self->request_queue, &request, offsetof(write_request_t, data), 0);
+    tiny_queue_peek_partial(&self->request_queue, &request, offsetof(write_request_t, data), 0, 0);
 
     if(packet->payload_length == sizeof(tiny_gea2_erd_api_write_response_payload_t)) {
       reinterpret(payload, packet->payload, const tiny_gea2_erd_api_write_response_payload_t*);

@@ -28,7 +28,6 @@ typedef struct {
   tiny_event_subscription_t byte_received_subscription;
   tiny_event_subscription_t byte_sent_subscription;
   i_tiny_uart_t* uart;
-  uint8_t* send_buffer;
   uint8_t* receive_buffer;
 
   tiny_queue_t send_queue;
@@ -38,8 +37,8 @@ typedef struct {
 
   uint8_t address;
 
-  uint8_t send_buffer_size;
   uint8_t send_offset;
+  uint8_t send_data_length;
   volatile bool send_in_progress;
 
   uint8_t receive_buffer_size;
@@ -61,8 +60,6 @@ void tiny_gea3_interface_init(
   tiny_gea3_interface_t* self,
   i_tiny_uart_t* uart,
   uint8_t address,
-  uint8_t* send_buffer,
-  uint8_t send_buffer_size,
   uint8_t* receive_buffer,
   uint8_t receive_buffer_size,
   uint8_t* send_queue_buffer,

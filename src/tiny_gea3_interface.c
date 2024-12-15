@@ -29,6 +29,9 @@ enum {
 };
 
 enum {
+  send_state_destination,
+  send_state_payload_length,
+  send_state_source,
   send_state_data,
   send_state_crc_msb,
   send_state_crc_lsb,
@@ -135,13 +138,14 @@ static bool determine_byte_to_send_considering_escapes(self_t* self, uint8_t byt
   return !self->send_escaped;
 }
 
-static void prepare_buffered_packet_for_transmission(self_t* self)
+static void begin_send(self_t* self)
 {
-  reinterpret(send_packet, self->send_buffer, send_packet_t*);
-  send_packet->data_length += tiny_gea_packet_transmission_overhead;
-  self->send_crc = tiny_crc16_block(tiny_gea_crc_seed, (const uint8_t*)send_packet, send_packet->data_length - data_length_bytes_not_included_in_data);
-  self->send_state = send_state_data;
+  tiny_queue_peek_partial(&self->send_queue, &self->send_data_length, sizeof(self->send_data_length), offsetof(send_packet_t, data_length), 0);
+  self->send_crc = tiny_gea_crc_seed;
+  self->send_state = send_state_destination;
   self->send_offset = 0;
+  self->send_in_progress = true;
+  tiny_uart_send(self->uart, tiny_gea_stx);
 }
 
 static void byte_sent(void* context, const void* args)
@@ -151,11 +155,7 @@ static void byte_sent(void* context, const void* args)
 
   if(!self->send_in_progress) {
     if(tiny_queue_count(&self->send_queue) > 0) {
-      uint16_t size;
-      tiny_queue_dequeue(&self->send_queue, self->send_buffer, &size);
-      prepare_buffered_packet_for_transmission(self);
-      self->send_in_progress = true;
-      tiny_uart_send(self->uart, tiny_gea_stx);
+      begin_send(self);
     }
     return;
   }
@@ -163,16 +163,54 @@ static void byte_sent(void* context, const void* args)
   uint8_t byte_to_send = 0;
 
   switch(self->send_state) {
-    case send_state_data:
-      if(determine_byte_to_send_considering_escapes(self, self->send_buffer[self->send_offset], &byte_to_send)) {
-        reinterpret(send_packet, self->send_buffer, const send_packet_t*);
+    case send_state_destination: {
+      uint8_t destination;
+      tiny_queue_peek_partial(&self->send_queue, &destination, sizeof(destination), self->send_offset, 0);
+      if(determine_byte_to_send_considering_escapes(self, destination, &byte_to_send)) {
+        self->send_crc = tiny_crc16_byte(self->send_crc, byte_to_send);
         self->send_offset++;
+        self->send_state = send_state_payload_length;
+      }
+      break;
+    }
 
-        if(self->send_offset >= send_packet->data_length - data_length_bytes_not_included_in_data) {
+    case send_state_payload_length: {
+      if(determine_byte_to_send_considering_escapes(self, self->send_data_length, &byte_to_send)) {
+        self->send_crc = tiny_crc16_byte(self->send_crc, byte_to_send);
+        self->send_offset++;
+        self->send_state = send_state_source;
+      }
+      break;
+    }
+
+    case send_state_source: {
+      uint8_t source;
+      tiny_queue_peek_partial(&self->send_queue, &source, sizeof(source), self->send_offset, 0);
+      if(determine_byte_to_send_considering_escapes(self, source, &byte_to_send)) {
+        self->send_crc = tiny_crc16_byte(self->send_crc, byte_to_send);
+        self->send_offset++;
+        if(self->send_data_length == tiny_gea_packet_transmission_overhead) {
+          self->send_state = send_state_crc_msb;
+        }
+        else {
+          self->send_state = send_state_data;
+        }
+      }
+      break;
+    }
+
+    case send_state_data: {
+      uint8_t data;
+      tiny_queue_peek_partial(&self->send_queue, &data, sizeof(data), self->send_offset, 0);
+      if(determine_byte_to_send_considering_escapes(self, data, &byte_to_send)) {
+        self->send_crc = tiny_crc16_byte(self->send_crc, byte_to_send);
+        self->send_offset++;
+        if(self->send_offset >= self->send_data_length - data_length_bytes_not_included_in_data) {
           self->send_state = send_state_crc_msb;
         }
       }
       break;
+    }
 
     case send_state_crc_msb:
       byte_to_send = self->send_crc >> 8;
@@ -189,6 +227,7 @@ static void byte_sent(void* context, const void* args)
       break;
 
     case send_state_etx:
+      tiny_queue_discard(&self->send_queue);
       self->send_in_progress = false;
       byte_to_send = tiny_gea_etx;
       break;
@@ -206,7 +245,7 @@ static void populate_send_packet(
   void* context,
   bool set_source_address)
 {
-  packet->payload_length = payload_length;
+  packet->payload_length = payload_length + tiny_gea_packet_transmission_overhead;
   callback(context, (tiny_gea_packet_t*)packet);
   if(set_source_address) {
     packet->source = self->address;
@@ -224,23 +263,15 @@ static bool send_worker(
 {
   reinterpret(self, _self, self_t*);
 
-  if(payload_length + send_packet_header_size > self->send_buffer_size) {
+  uint8_t buffer[255]; // fixme stack alloc
+  populate_send_packet(self, (tiny_gea_packet_t*)buffer, destination, payload_length, callback, context, set_source_address);
+
+  if(!tiny_queue_enqueue(&self->send_queue, buffer, tiny_gea_packet_overhead + payload_length)) {
     return false;
   }
 
-  if(self->send_in_progress) {
-    uint8_t buffer[255];
-    populate_send_packet(self, (tiny_gea_packet_t*)buffer, destination, payload_length, callback, context, set_source_address);
-    if(!tiny_queue_enqueue(&self->send_queue, buffer, tiny_gea_packet_overhead + payload_length)) {
-      return false;
-    }
-  }
-  else {
-    reinterpret(send_packet, self->send_buffer, tiny_gea_packet_t*);
-    populate_send_packet(self, send_packet, destination, payload_length, callback, context, set_source_address);
-    prepare_buffered_packet_for_transmission(self);
-    self->send_in_progress = true;
-    tiny_uart_send(self->uart, tiny_gea_stx);
+  if(!self->send_in_progress) {
+    begin_send(self);
   }
 
   return true;
@@ -278,8 +309,6 @@ void tiny_gea3_interface_init(
   tiny_gea3_interface_t* self,
   i_tiny_uart_t* uart,
   uint8_t address,
-  uint8_t* send_buffer,
-  uint8_t send_buffer_size,
   uint8_t* receive_buffer,
   uint8_t receive_buffer_size,
   uint8_t* send_queue_buffer,
@@ -290,8 +319,6 @@ void tiny_gea3_interface_init(
 
   self->uart = uart;
   self->address = address;
-  self->send_buffer = send_buffer;
-  self->send_buffer_size = send_buffer_size;
   self->receive_buffer = receive_buffer;
   self->receive_buffer_size = receive_buffer_size;
   self->ignore_destination_address = ignore_destination_address;
