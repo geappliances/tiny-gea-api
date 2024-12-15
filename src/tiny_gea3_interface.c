@@ -3,7 +3,7 @@
  * @brief
  *
  * # Notes on Interrupt Safety
- *
+ * ## Sending
  * Sending is interrupt-safe because the interrupt context only peeks from
  * the first element of the queue and makes no changes to the queue. While
  * sending, the non-interrupt context is free to add elements to the queue
@@ -23,7 +23,7 @@
  *
  * [Non-interrupt]                     [Interrupt]
  *        |                                 |
- *   queue packet                           |
+ *  packet queued                           |
  *        |                                 |
  *        |---                              |
  *        |  | send.in_progress == true     |
@@ -31,7 +31,7 @@
  *        |                                 |
  *        |--- send.in_progress = true ---->|
  *        |                                 |
- *        |                            send packet
+ *        |                            packet sent
  *        |                                 |
  *        |<------ send.completed = true ---|
  *        |                                 |
@@ -39,6 +39,23 @@
  *        |--- send.in_progress = false --->|
  *        |                                 |
  *       ...                               ...
+ *
+ * ## Receiving
+ * Receiving is interrupt safe because the receive.packet_ready flag is used
+ * to ensure that only one of the interrupt and non-interrupt contexts is
+ * using the receive buffer at any time.
+ *
+ * The interrupt context sets the receive.packet_ready flag. While the flag is
+ * true, the interrupt context does not read from or write to the receive
+ * buffer. After a valid received packet has been completely written to the
+ * receive buffer, the interrupt context sets the receive.packet_ready flag
+ * to indicate that it is ready for use by the non-interrupt context.
+ *
+ * The non-interrupt context clears the receive.packet_ready flag. While the
+ * flag is false, the non-interrupt context does not read from or write to the
+ * receive buffer. After a received packet has been processed by the non-
+ * interrupt context, the it clears the flag to indicate that it is ready for
+ * use by the interrupt context.
  */
 
 #include <stdbool.h>
