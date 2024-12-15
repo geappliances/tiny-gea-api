@@ -39,7 +39,8 @@ typedef struct {
 
   uint8_t send_offset;
   uint8_t send_data_length;
-  volatile bool send_in_progress;
+  bool send_in_progress;
+  volatile bool send_completed; // Set by ISR, cleared by background
 
   uint8_t receive_buffer_size;
   uint8_t receive_count;

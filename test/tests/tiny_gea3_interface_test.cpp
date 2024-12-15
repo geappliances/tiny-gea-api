@@ -384,6 +384,7 @@ TEST(tiny_gea3_interface, should_queue_sent_packets)
     tiny_gea_etx);
 
   after_send_completes();
+  after_the_interface_is_run();
 }
 
 TEST(tiny_gea3_interface, should_report_failure_to_enqueue)

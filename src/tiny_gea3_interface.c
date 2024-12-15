@@ -36,7 +36,8 @@ enum {
   send_state_data,
   send_state_crc_msb,
   send_state_crc_lsb,
-  send_state_etx
+  send_state_etx,
+  send_state_complete
 };
 
 #define needs_escape(_byte) ((_byte & 0xFC) == tiny_gea_esc)
@@ -154,13 +155,6 @@ static void byte_sent(void* context, const void* args)
   reinterpret(self, context, self_t*);
   (void)args;
 
-  if(!self->send_in_progress) {
-    if(tiny_queue_count(&self->send_queue) > 0) {
-      begin_send(self);
-    }
-    return;
-  }
-
   uint8_t byte_to_send = 0;
 
   switch(self->send_state) {
@@ -228,10 +222,13 @@ static void byte_sent(void* context, const void* args)
       break;
 
     case send_state_etx:
-      tiny_queue_discard(&self->send_queue);
-      self->send_in_progress = false;
       byte_to_send = tiny_gea_etx;
+      self->send_state = send_state_complete;
       break;
+
+    case send_state_complete:
+      self->send_completed = true;
+      return;
   }
 
   tiny_uart_send(self->uart, byte_to_send);
@@ -344,6 +341,7 @@ void tiny_gea3_interface_init(
   self->ignore_destination_address = ignore_destination_address;
   self->receive_escaped = false;
   self->send_in_progress = false;
+  self->send_completed = false;
   self->send_escaped = false;
   self->stx_received = false;
   self->receive_packet_ready = false;
@@ -369,5 +367,17 @@ void tiny_gea3_interface_run(self_t* self)
 
     // Can only be cleared _after_ publication so that the buffer isn't reused
     self->receive_packet_ready = false;
+  }
+
+  if(self->send_completed) {
+    tiny_queue_discard(&self->send_queue);
+    self->send_completed = false;
+    self->send_in_progress = false;
+  }
+
+  if(!self->send_in_progress) {
+    if(tiny_queue_count(&self->send_queue) > 0) {
+      begin_send(self);
+    }
   }
 }
