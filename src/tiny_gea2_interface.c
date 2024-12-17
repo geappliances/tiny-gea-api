@@ -709,10 +709,10 @@ void tiny_gea2_interface_init(
   i_tiny_time_source_t* time_source,
   i_tiny_event_t* msec_interrupt,
   uint8_t address,
-  uint8_t* receive_buffer,
-  uint8_t receive_buffer_size,
   uint8_t* send_queue_buffer,
   size_t send_queue_buffer_size,
+  uint8_t* receive_buffer,
+  uint8_t receive_buffer_size,
   bool ignore_destination_address,
   uint8_t retries)
 {

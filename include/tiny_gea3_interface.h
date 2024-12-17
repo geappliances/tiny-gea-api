@@ -61,10 +61,10 @@ void tiny_gea3_interface_init(
   tiny_gea3_interface_t* self,
   i_tiny_uart_t* uart,
   uint8_t address,
-  uint8_t* receive_buffer,
-  uint8_t receive_buffer_size,
   uint8_t* send_queue_buffer,
   size_t send_queue_buffer_size,
+  uint8_t* receive_buffer,
+  uint8_t receive_buffer_size,
   bool ignore_destination_address);
 
 /*!
