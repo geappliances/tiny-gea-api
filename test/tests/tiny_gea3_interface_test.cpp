@@ -48,10 +48,10 @@ TEST_GROUP(tiny_gea3_interface)
       &self,
       &uart.interface,
       address,
-      receive_buffer,
-      sizeof(receive_buffer),
       send_queue,
       sizeof(send_queue),
+      receive_buffer,
+      sizeof(receive_buffer),
       false);
 
     tiny_event_subscription_init(&receive_subscription, NULL, packet_received);
@@ -67,10 +67,10 @@ TEST_GROUP(tiny_gea3_interface)
       &self,
       &uart.interface,
       address,
-      receive_buffer,
-      sizeof(receive_buffer),
       send_queue,
       sizeof(send_queue),
+      receive_buffer,
+      sizeof(receive_buffer),
       true);
 
     tiny_event_subscribe(tiny_gea_interface_on_receive(&self.interface), &receive_subscription);

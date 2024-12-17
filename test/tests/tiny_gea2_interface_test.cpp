@@ -55,10 +55,10 @@ TEST_GROUP(tiny_gea2_interface)
       &time_source.interface,
       &msec_interrupt.interface,
       address,
-      receive_buffer,
-      sizeof(receive_buffer),
       send_queue_buffer,
       sizeof(send_queue_buffer),
+      receive_buffer,
+      sizeof(receive_buffer),
       false,
       default_retries);
 
@@ -74,10 +74,10 @@ TEST_GROUP(tiny_gea2_interface)
       &time_source.interface,
       &msec_interrupt.interface,
       address,
-      receive_buffer,
-      sizeof(receive_buffer),
       send_queue_buffer,
       sizeof(send_queue_buffer),
+      receive_buffer,
+      sizeof(receive_buffer),
       true,
       default_retries);
 
@@ -92,10 +92,10 @@ TEST_GROUP(tiny_gea2_interface)
       &time_source.interface,
       &msec_interrupt.interface,
       address,
-      receive_buffer,
-      sizeof(receive_buffer),
       send_queue_buffer,
       sizeof(send_queue_buffer),
+      receive_buffer,
+      sizeof(receive_buffer),
       false,
       retries);
   }
