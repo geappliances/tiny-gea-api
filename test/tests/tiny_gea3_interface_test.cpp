@@ -21,7 +21,6 @@ TEST_GROUP(tiny_gea3_interface)
   enum {
     address = 0xAD,
 
-    send_buffer_size = 10,
     receive_buffer_size = 9,
     send_queue_size = 20
   };
@@ -29,7 +28,6 @@ TEST_GROUP(tiny_gea3_interface)
   tiny_gea3_interface_t self;
   tiny_uart_double_t uart;
   tiny_event_subscription_t receive_subscription;
-  uint8_t send_buffer[send_buffer_size];
   uint8_t receive_buffer[receive_buffer_size];
   uint8_t send_queue[send_queue_size];
 
@@ -50,12 +48,10 @@ TEST_GROUP(tiny_gea3_interface)
       &self,
       &uart.interface,
       address,
-      send_buffer,
-      sizeof(send_buffer),
-      receive_buffer,
-      sizeof(receive_buffer),
       send_queue,
       sizeof(send_queue),
+      receive_buffer,
+      sizeof(receive_buffer),
       false);
 
     tiny_event_subscription_init(&receive_subscription, NULL, packet_received);
@@ -71,12 +67,10 @@ TEST_GROUP(tiny_gea3_interface)
       &self,
       &uart.interface,
       address,
-      send_buffer,
-      sizeof(send_buffer),
-      receive_buffer,
-      sizeof(receive_buffer),
       send_queue,
       sizeof(send_queue),
+      receive_buffer,
+      sizeof(receive_buffer),
       true);
 
     tiny_event_subscribe(tiny_gea_interface_on_receive(&self.interface), &receive_subscription);
@@ -292,9 +286,9 @@ TEST(tiny_gea3_interface, should_send_a_packet_with_max_payload_given_send_buffe
   when_packet_is_sent(packet);
 }
 
-TEST(tiny_gea3_interface, should_not_send_a_packet_that_is_too_large_for_the_send_buffer)
+TEST(tiny_gea3_interface, should_not_send_a_packet_that_is_too_large_for_the_send_queue)
 {
-  tiny_gea_STATIC_ALLOC_PACKET(packet, 8);
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 16);
 
   nothing_should_happen();
   when_packet_is_sent(packet);
@@ -389,6 +383,7 @@ TEST(tiny_gea3_interface, should_queue_sent_packets)
     tiny_gea_etx);
 
   after_send_completes();
+  after_the_interface_is_run();
 }
 
 TEST(tiny_gea3_interface, should_report_failure_to_enqueue)

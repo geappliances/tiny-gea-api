@@ -1,27 +1,73 @@
 /*!
  * @file
  * @brief
+ *
+ * # Notes on Interrupt Safety
+ * ## Sending
+ * Sending is interrupt-safe because the interrupt context only peeks from
+ * the first element of the queue and makes no changes to the queue. While
+ * sending, the non-interrupt context is free to add elements to the queue
+ * as long as it does not remove any elements from the queue or otherwise
+ * modify the first element in the queue. Only when the interrupt context
+ * is done sending a packet is an element removed from the queue and while
+ * this operation is pending the interrupt context is not free to begin
+ * sending any additional packets.
+ *
+ * The non-interrupt context sets the send.in_progress flag and clears
+ * the send.completed flag. While send.completed remains false, the first
+ * element of the queue is not modified.
+ *
+ * The interrupt context sets the send.completed flag to indicate that it
+ * is no longer reading from the queue. Until send.completed is false, it
+ * does not read from the queue.
+ *
+ * [Non-interrupt]                     [Interrupt]
+ *        |                                 |
+ *  packet queued                           |
+ *        |                                 |
+ *        |---                              |
+ *        |  | send.in_progress == true     |
+ *        |<--                              |
+ *        |                                 |
+ *        |--- send.in_progress = true ---->|
+ *        |                                 |
+ *        |                            packet sent
+ *        |                                 |
+ *        |<------ send.completed = true ---|
+ *        |                                 |
+ *        |--- send.completed = false ----->|
+ *        |--- send.in_progress = false --->|
+ *        |                                 |
+ *       ...                               ...
+ *
+ * ## Receiving
+ * Receiving is interrupt safe because the receive.packet_ready flag is used
+ * to ensure that only one of the interrupt and non-interrupt contexts is
+ * using the receive buffer at any time.
+ *
+ * The interrupt context sets the receive.packet_ready flag. While the flag is
+ * true, the interrupt context does not read from or write to the receive
+ * buffer. After a valid received packet has been completely written to the
+ * receive buffer, the interrupt context sets the receive.packet_ready flag
+ * to indicate that it is ready for use by the non-interrupt context.
+ *
+ * The non-interrupt context clears the receive.packet_ready flag. While the
+ * flag is false, the non-interrupt context does not read from or write to the
+ * receive buffer. After a received packet has been processed by the non-
+ * interrupt context, the it clears the flag to indicate that it is ready for
+ * use by the interrupt context.
  */
 
 #include <stdbool.h>
 #include "tiny_crc16.h"
 #include "tiny_gea3_interface.h"
 #include "tiny_gea_constants.h"
+#include "tiny_stack_allocator.h"
 #include "tiny_utils.h"
 
 typedef tiny_gea3_interface_t self_t;
 
-// Send packet should match tiny_gea_packet_t, but stores data_length (per spec) instead of payload_length
-// (used application convenience)
-typedef struct {
-  uint8_t destination;
-  uint8_t data_length;
-  uint8_t source;
-  uint8_t data[1];
-} send_packet_t;
-
 enum {
-  send_packet_header_size = offsetof(send_packet_t, data),
   data_length_bytes_not_included_in_data = tiny_gea_packet_transmission_overhead - tiny_gea_packet_overhead,
   crc_size = sizeof(uint16_t),
   packet_bytes_not_included_in_payload = crc_size + offsetof(tiny_gea_packet_t, payload),
@@ -29,10 +75,14 @@ enum {
 };
 
 enum {
+  send_state_destination,
+  send_state_payload_length,
+  send_state_source,
   send_state_data,
   send_state_crc_msb,
   send_state_crc_lsb,
-  send_state_etx
+  send_state_etx,
+  send_state_complete
 };
 
 #define needs_escape(_byte) ((_byte & 0xFC) == tiny_gea_esc)
@@ -135,13 +185,14 @@ static bool determine_byte_to_send_considering_escapes(self_t* self, uint8_t byt
   return !self->send_escaped;
 }
 
-static void prepare_buffered_packet_for_transmission(self_t* self)
+static void begin_send(self_t* self)
 {
-  reinterpret(send_packet, self->send_buffer, send_packet_t*);
-  send_packet->data_length += tiny_gea_packet_transmission_overhead;
-  self->send_crc = tiny_crc16_block(tiny_gea_crc_seed, (const uint8_t*)send_packet, send_packet->data_length - data_length_bytes_not_included_in_data);
-  self->send_state = send_state_data;
+  tiny_queue_peek_partial(&self->send_queue, &self->send_data_length, sizeof(self->send_data_length), offsetof(tiny_gea_packet_t, payload_length), 0);
+  self->send_crc = tiny_gea_crc_seed;
+  self->send_state = send_state_destination;
   self->send_offset = 0;
+  self->send_in_progress = true;
+  tiny_uart_send(self->uart, tiny_gea_stx);
 }
 
 static void byte_sent(void* context, const void* args)
@@ -149,30 +200,57 @@ static void byte_sent(void* context, const void* args)
   reinterpret(self, context, self_t*);
   (void)args;
 
-  if(!self->send_in_progress) {
-    if(tiny_queue_count(&self->send_queue) > 0) {
-      uint16_t size;
-      tiny_queue_dequeue(&self->send_queue, self->send_buffer, &size);
-      prepare_buffered_packet_for_transmission(self);
-      self->send_in_progress = true;
-      tiny_uart_send(self->uart, tiny_gea_stx);
-    }
-    return;
-  }
-
   uint8_t byte_to_send = 0;
 
   switch(self->send_state) {
-    case send_state_data:
-      if(determine_byte_to_send_considering_escapes(self, self->send_buffer[self->send_offset], &byte_to_send)) {
-        reinterpret(send_packet, self->send_buffer, const send_packet_t*);
+    case send_state_destination: {
+      uint8_t destination;
+      tiny_queue_peek_partial(&self->send_queue, &destination, sizeof(destination), self->send_offset, 0);
+      if(determine_byte_to_send_considering_escapes(self, destination, &byte_to_send)) {
+        self->send_crc = tiny_crc16_byte(self->send_crc, byte_to_send);
         self->send_offset++;
+        self->send_state = send_state_payload_length;
+      }
+      break;
+    }
 
-        if(self->send_offset >= send_packet->data_length - data_length_bytes_not_included_in_data) {
+    case send_state_payload_length: {
+      if(determine_byte_to_send_considering_escapes(self, self->send_data_length, &byte_to_send)) {
+        self->send_crc = tiny_crc16_byte(self->send_crc, byte_to_send);
+        self->send_offset++;
+        self->send_state = send_state_source;
+      }
+      break;
+    }
+
+    case send_state_source: {
+      uint8_t source;
+      tiny_queue_peek_partial(&self->send_queue, &source, sizeof(source), self->send_offset, 0);
+      if(determine_byte_to_send_considering_escapes(self, source, &byte_to_send)) {
+        self->send_crc = tiny_crc16_byte(self->send_crc, byte_to_send);
+        self->send_offset++;
+        if(self->send_data_length == tiny_gea_packet_transmission_overhead) {
+          self->send_state = send_state_crc_msb;
+        }
+        else {
+          self->send_state = send_state_data;
+        }
+      }
+      break;
+    }
+
+    case send_state_data: {
+      uint8_t data;
+      tiny_queue_peek_partial(&self->send_queue, &data, sizeof(data), self->send_offset, 0);
+      if(determine_byte_to_send_considering_escapes(self, data, &byte_to_send)) {
+        self->send_crc = tiny_crc16_byte(self->send_crc, byte_to_send);
+        self->send_offset++;
+        if(self->send_offset >= self->send_data_length - data_length_bytes_not_included_in_data) {
           self->send_state = send_state_crc_msb;
         }
       }
       break;
+    }
 
     case send_state_crc_msb:
       byte_to_send = self->send_crc >> 8;
@@ -189,29 +267,41 @@ static void byte_sent(void* context, const void* args)
       break;
 
     case send_state_etx:
-      self->send_in_progress = false;
       byte_to_send = tiny_gea_etx;
+      self->send_state = send_state_complete;
       break;
+
+    case send_state_complete:
+      self->send_completed = true;
+      return;
   }
 
   tiny_uart_send(self->uart, byte_to_send);
 }
 
-static void populate_send_packet(
-  self_t* self,
-  tiny_gea_packet_t* packet,
-  uint8_t destination,
-  uint8_t payload_length,
-  tiny_gea_interface_send_callback_t callback,
-  void* context,
-  bool set_source_address)
+typedef struct {
+  self_t* self;
+  uint8_t destination;
+  uint8_t payload_length;
+  tiny_gea_interface_send_callback_t callback;
+  void* context;
+  bool set_source_address;
+  bool queued;
+} send_worker_context_t;
+
+static void send_worker_callback(void* _context, void* buffer)
 {
-  packet->payload_length = payload_length;
-  callback(context, (tiny_gea_packet_t*)packet);
-  if(set_source_address) {
-    packet->source = self->address;
+  send_worker_context_t* context = _context;
+  tiny_gea_packet_t* packet = buffer;
+
+  packet->payload_length = context->payload_length + tiny_gea_packet_transmission_overhead;
+  context->callback(context->context, packet);
+  if(context->set_source_address) {
+    packet->source = context->self->address;
   }
-  packet->destination = destination;
+  packet->destination = context->destination;
+
+  context->queued = tiny_queue_enqueue(&context->self->send_queue, buffer, tiny_gea_packet_overhead + context->payload_length);
 }
 
 static bool send_worker(
@@ -224,23 +314,26 @@ static bool send_worker(
 {
   reinterpret(self, _self, self_t*);
 
-  if(payload_length + send_packet_header_size > self->send_buffer_size) {
+  send_worker_context_t send_worker_context = {
+    .self = self,
+    .destination = destination,
+    .payload_length = payload_length,
+    .callback = callback,
+    .context = context,
+    .set_source_address = set_source_address,
+    .queued = false
+  };
+  tiny_stack_allocator_allocate_aligned(
+    sizeof(tiny_gea_packet_t) + payload_length,
+    &send_worker_context,
+    send_worker_callback);
+
+  if(!send_worker_context.queued) {
     return false;
   }
 
-  if(self->send_in_progress) {
-    uint8_t buffer[255];
-    populate_send_packet(self, (tiny_gea_packet_t*)buffer, destination, payload_length, callback, context, set_source_address);
-    if(!tiny_queue_enqueue(&self->send_queue, buffer, tiny_gea_packet_overhead + payload_length)) {
-      return false;
-    }
-  }
-  else {
-    reinterpret(send_packet, self->send_buffer, tiny_gea_packet_t*);
-    populate_send_packet(self, send_packet, destination, payload_length, callback, context, set_source_address);
-    prepare_buffered_packet_for_transmission(self);
-    self->send_in_progress = true;
-    tiny_uart_send(self->uart, tiny_gea_stx);
+  if(!self->send_in_progress) {
+    begin_send(self);
   }
 
   return true;
@@ -278,25 +371,22 @@ void tiny_gea3_interface_init(
   tiny_gea3_interface_t* self,
   i_tiny_uart_t* uart,
   uint8_t address,
-  uint8_t* send_buffer,
-  uint8_t send_buffer_size,
-  uint8_t* receive_buffer,
-  uint8_t receive_buffer_size,
   uint8_t* send_queue_buffer,
   size_t send_queue_buffer_size,
+  uint8_t* receive_buffer,
+  uint8_t receive_buffer_size,
   bool ignore_destination_address)
 {
   self->interface.api = &api;
 
   self->uart = uart;
   self->address = address;
-  self->send_buffer = send_buffer;
-  self->send_buffer_size = send_buffer_size;
   self->receive_buffer = receive_buffer;
   self->receive_buffer_size = receive_buffer_size;
   self->ignore_destination_address = ignore_destination_address;
   self->receive_escaped = false;
   self->send_in_progress = false;
+  self->send_completed = false;
   self->send_escaped = false;
   self->stx_received = false;
   self->receive_packet_ready = false;
@@ -322,5 +412,17 @@ void tiny_gea3_interface_run(self_t* self)
 
     // Can only be cleared _after_ publication so that the buffer isn't reused
     self->receive_packet_ready = false;
+  }
+
+  if(self->send_completed) {
+    tiny_queue_discard(&self->send_queue);
+    self->send_completed = false;
+    self->send_in_progress = false;
+  }
+
+  if(!self->send_in_progress) {
+    if(tiny_queue_count(&self->send_queue) > 0) {
+      begin_send(self);
+    }
   }
 }

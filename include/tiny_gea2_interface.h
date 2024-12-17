@@ -45,18 +45,16 @@ typedef struct
   struct
   {
     tiny_queue_t queue;
-    tiny_timer_group_t* queue_timer_group;
-    tiny_timer_t queue_timer;
-    uint8_t* buffer;
-    uint8_t buffer_size;
     uint8_t state;
     uint8_t offset;
     uint16_t crc;
     bool escaped;
-    volatile bool active;
-    volatile bool packet_queued_in_background;
+    volatile bool in_progress; // Set and cleared by the non-ISR, read by the ISR
+    volatile bool completed; // Set by ISR, cleared by non-ISR
+    volatile bool packet_queued_in_background; // Set by ISR, cleared by non-ISR
     uint8_t expected_reflection;
     uint8_t retries;
+    uint8_t data_length;
   } send;
 
   struct
@@ -76,15 +74,13 @@ typedef struct
 void tiny_gea2_interface_init(
   tiny_gea2_interface_t* self,
   i_tiny_uart_t* uart,
-  tiny_timer_group_t* timer_group,
+  i_tiny_time_source_t* time_source,
   i_tiny_event_t* msec_interrupt,
   uint8_t address,
-  uint8_t* send_buffer,
-  uint8_t send_buffer_size,
-  uint8_t* receive_buffer,
-  uint8_t receive_buffer_size,
   uint8_t* send_queue_buffer,
   size_t send_queue_buffer_size,
+  uint8_t* receive_buffer,
+  uint8_t receive_buffer_size,
   bool ignore_destination_address,
   uint8_t retries);
 

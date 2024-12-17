@@ -28,7 +28,6 @@ typedef struct {
   tiny_event_subscription_t byte_received_subscription;
   tiny_event_subscription_t byte_sent_subscription;
   i_tiny_uart_t* uart;
-  uint8_t* send_buffer;
   uint8_t* receive_buffer;
 
   tiny_queue_t send_queue;
@@ -38,13 +37,14 @@ typedef struct {
 
   uint8_t address;
 
-  uint8_t send_buffer_size;
   uint8_t send_offset;
-  volatile bool send_in_progress;
+  uint8_t send_data_length;
+  volatile bool send_in_progress; // Set and cleared by the non-ISR, read by the ISR
+  volatile bool send_completed; // Set by ISR, cleared by non-ISR
 
   uint8_t receive_buffer_size;
   uint8_t receive_count;
-  volatile bool receive_packet_ready; // Set by ISR, cleared by background
+  volatile bool receive_packet_ready; // Set by ISR, cleared by non-ISR
 
   uint8_t send_state;
   bool send_escaped;
@@ -61,12 +61,10 @@ void tiny_gea3_interface_init(
   tiny_gea3_interface_t* self,
   i_tiny_uart_t* uart,
   uint8_t address,
-  uint8_t* send_buffer,
-  uint8_t send_buffer_size,
-  uint8_t* receive_buffer,
-  uint8_t receive_buffer_size,
   uint8_t* send_queue_buffer,
   size_t send_queue_buffer_size,
+  uint8_t* receive_buffer,
+  uint8_t receive_buffer_size,
   bool ignore_destination_address);
 
 /*!
