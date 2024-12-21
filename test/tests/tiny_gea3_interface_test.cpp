@@ -22,6 +22,7 @@ TEST_GROUP(tiny_gea3_interface)
     address = 0xAD,
 
     receive_buffer_size = 9,
+    received_byte_buffer_size = 17,
     send_queue_size = 20
   };
 
@@ -29,6 +30,7 @@ TEST_GROUP(tiny_gea3_interface)
   tiny_uart_double_t uart;
   tiny_event_subscription_t receive_subscription;
   uint8_t receive_buffer[receive_buffer_size];
+  uint8_t received_byte_buffer[received_byte_buffer_size];
   uint8_t send_queue[send_queue_size];
 
   void setup()
@@ -52,6 +54,8 @@ TEST_GROUP(tiny_gea3_interface)
       sizeof(send_queue),
       receive_buffer,
       sizeof(receive_buffer),
+      received_byte_buffer,
+      sizeof(received_byte_buffer),
       false);
 
     tiny_event_subscription_init(&receive_subscription, NULL, packet_received);
@@ -71,6 +75,8 @@ TEST_GROUP(tiny_gea3_interface)
       sizeof(send_queue),
       receive_buffer,
       sizeof(receive_buffer),
+      received_byte_buffer,
+      sizeof(received_byte_buffer),
       true);
 
     tiny_event_subscribe(tiny_gea_interface_on_receive(&self.interface), &receive_subscription);
@@ -654,7 +660,7 @@ TEST(tiny_gea3_interface, should_drop_packets_with_invalid_length)
   after_the_interface_is_run();
 }
 
-TEST(tiny_gea3_interface, should_drop_packets_received_before_publishing_a_previously_received_packet)
+TEST(tiny_gea3_interface, should_receive_multiple_packets_buffered_before_the_interface_is_run)
 {
   after_bytes_are_received_via_uart(
     tiny_gea_stx,
@@ -676,11 +682,52 @@ TEST(tiny_gea3_interface, should_drop_packets_received_before_publishing_a_previ
     0x5E,
     tiny_gea_etx);
 
+  tiny_gea_STATIC_ALLOC_PACKET(packet_1, 1);
+  packet_1->destination = address;
+  packet_1->source = 0x45;
+  packet_1->payload[0] = 0xBF;
+  packet_should_be_received(packet_1);
+  after_the_interface_is_run();
+
+  tiny_gea_STATIC_ALLOC_PACKET(packet_2, 1);
+  packet_2->destination = 0xFF;
+  packet_2->source = 0x45;
+  packet_2->payload[0] = 0xBF;
+  packet_should_be_received(packet_2);
+  after_the_interface_is_run();
+}
+
+TEST(tiny_gea3_interface, should_drop_received_bytes_that_would_fill_the_received_byte_ring_buffer)
+{
+  after_bytes_are_received_via_uart(
+    tiny_gea_stx,
+    address, // dst
+    0x08, // len
+    0x45, // src
+    0xBF, // payload
+    0x74, // crc
+    0x0D,
+    tiny_gea_etx);
+
+  after_bytes_are_received_via_uart(
+    tiny_gea_stx,
+    0xFF, // dst
+    0x09, // len
+    0x45, // src
+    0xBF, // payload
+    0x21,
+    0x20, // crc
+    0x55,
+    tiny_gea_etx);
+
   tiny_gea_STATIC_ALLOC_PACKET(packet, 1);
   packet->destination = address;
   packet->source = 0x45;
   packet->payload[0] = 0xBF;
   packet_should_be_received(packet);
+  after_the_interface_is_run();
+
+  nothing_should_happen();
   after_the_interface_is_run();
 }
 
@@ -710,7 +757,7 @@ TEST(tiny_gea3_interface, should_receive_a_packet_after_a_previous_packet_is_abo
 TEST(tiny_gea3_interface, should_drop_bytes_received_prior_to_stx)
 {
   after_bytes_are_received_via_uart(
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, //
+    1, 2, 3, 4, 5, 6, 7, 8, //
     tiny_gea_stx,
     address, // dst
     0x08, // len

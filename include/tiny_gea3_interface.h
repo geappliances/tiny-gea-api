@@ -20,6 +20,7 @@
 #include "i_tiny_gea_interface.h"
 #include "tiny_event.h"
 #include "tiny_queue.h"
+#include "tiny_ring_buffer.h"
 
 typedef struct {
   i_tiny_gea_interface_t interface;
@@ -29,6 +30,7 @@ typedef struct {
   tiny_event_subscription_t byte_sent_subscription;
   i_tiny_uart_t* uart;
   uint8_t* receive_buffer;
+  tiny_ring_buffer_t received_byte_ring_buffer;
 
   tiny_queue_t send_queue;
 
@@ -43,8 +45,8 @@ typedef struct {
   volatile bool send_completed; // Set by ISR, cleared by non-ISR
 
   uint8_t receive_buffer_size;
+  uint8_t received_byte_buffer_size;
   uint8_t receive_count;
-  volatile bool receive_packet_ready; // Set by ISR, cleared by non-ISR
 
   uint8_t send_state;
   bool send_escaped;
@@ -65,6 +67,8 @@ void tiny_gea3_interface_init(
   size_t send_queue_buffer_size,
   uint8_t* receive_buffer,
   uint8_t receive_buffer_size,
+  uint8_t* received_byte_buffer,
+  size_t received_byte_buffer_size,
   bool ignore_destination_address);
 
 /*!
