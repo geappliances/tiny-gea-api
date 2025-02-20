@@ -294,14 +294,16 @@ static void send_worker_callback(void* _context, void* buffer)
   send_worker_context_t* context = _context;
   tiny_gea_packet_t* packet = buffer;
 
-  packet->payload_length = context->payload_length + tiny_gea_packet_transmission_overhead;
+  packet->payload_length = context->payload_length;
   context->callback(context->context, packet);
   if(context->set_source_address) {
     packet->source = context->self->address;
   }
+  uint8_t payload_length = packet->payload_length;
+  packet->payload_length += tiny_gea_packet_transmission_overhead;
   packet->destination = context->destination;
 
-  context->queued = tiny_queue_enqueue(&context->self->send_queue, buffer, tiny_gea_packet_overhead + context->payload_length);
+  context->queued = tiny_queue_enqueue(&context->self->send_queue, buffer, payload_length + tiny_gea_packet_overhead);
 }
 
 static bool send_worker(
