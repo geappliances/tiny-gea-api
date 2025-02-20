@@ -41,21 +41,11 @@
  *       ...                               ...
  *
  * ## Receiving
- * Receiving is interrupt safe because the receive.packet_ready flag is used
- * to ensure that only one of the interrupt and non-interrupt contexts is
- * using the receive buffer at any time.
- *
- * The interrupt context sets the receive.packet_ready flag. While the flag is
- * true, the interrupt context does not read from or write to the receive
- * buffer. After a valid received packet has been completely written to the
- * receive buffer, the interrupt context sets the receive.packet_ready flag
- * to indicate that it is ready for use by the non-interrupt context.
- *
- * The non-interrupt context clears the receive.packet_ready flag. While the
- * flag is false, the non-interrupt context does not read from or write to the
- * receive buffer. After a received packet has been processed by the non-
- * interrupt context, the it clears the flag to indicate that it is ready for
- * use by the interrupt context.
+ * Receiving is interrupt-safe because received bytes are buffered in a ring
+ * buffer by the receive interrupt and removed and handled in the non-interrupt
+ * context. The ring buffer is not allowed to be filled to capacity so the
+ * interrupt-safety for the ring buffer are met. See tiny_ring_buffer.h for
+ * details.
  */
 
 #include <stdbool.h>
@@ -130,17 +120,20 @@ static void byte_received(void* context, const void* _args)
 {
   reinterpret(self, context, self_t*);
   reinterpret(args, _args, const tiny_uart_on_receive_args_t*);
-  reinterpret(packet, self->receive_buffer, tiny_gea_packet_t*);
-  uint8_t byte = args->byte;
 
-  if(self->receive_packet_ready) {
-    return;
+  if(tiny_ring_buffer_count(&self->received_byte_ring_buffer) + 1 < tiny_ring_buffer_capacity(&self->received_byte_ring_buffer)) {
+    tiny_ring_buffer_insert(&self->received_byte_ring_buffer, &args->byte);
   }
+}
+
+static bool handle_received_byte(self_t* self, uint8_t byte)
+{
+  reinterpret(packet, self->receive_buffer, tiny_gea_packet_t*);
 
   if(self->receive_escaped) {
     self->receive_escaped = false;
     buffer_received_byte(self, byte);
-    return;
+    return false;
   }
 
   switch(byte) {
@@ -160,7 +153,7 @@ static void byte_received(void* context, const void* _args)
         received_packet_has_valid_crc(self) &&
         received_packet_is_addressed_to_me(self)) {
         packet->payload_length -= tiny_gea_packet_transmission_overhead;
-        self->receive_packet_ready = true;
+        return true;
       }
       self->stx_received = false;
       break;
@@ -169,6 +162,8 @@ static void byte_received(void* context, const void* _args)
       buffer_received_byte(self, byte);
       break;
   }
+
+  return false;
 }
 
 static bool determine_byte_to_send_considering_escapes(self_t* self, uint8_t byte, uint8_t* byte_to_send)
@@ -377,6 +372,8 @@ void tiny_gea3_interface_init(
   size_t send_queue_buffer_size,
   uint8_t* receive_buffer,
   uint8_t receive_buffer_size,
+  uint8_t* received_byte_buffer,
+  size_t received_byte_buffer_size,
   bool ignore_destination_address)
 {
   self->interface.api = &api;
@@ -391,8 +388,13 @@ void tiny_gea3_interface_init(
   self->send_completed = false;
   self->send_escaped = false;
   self->stx_received = false;
-  self->receive_packet_ready = false;
   self->receive_count = 0;
+
+  tiny_ring_buffer_init(
+    &self->received_byte_ring_buffer,
+    received_byte_buffer,
+    sizeof(uint8_t),
+    received_byte_buffer_size);
 
   tiny_event_init(&self->on_receive);
 
@@ -407,13 +409,20 @@ void tiny_gea3_interface_init(
 
 void tiny_gea3_interface_run(self_t* self)
 {
-  if(self->receive_packet_ready) {
-    tiny_gea_interface_on_receive_args_t args;
-    args.packet = (const tiny_gea_packet_t*)self->receive_buffer;
-    tiny_event_publish(&self->on_receive, &args);
+  size_t received_byte_count = tiny_ring_buffer_count(&self->received_byte_ring_buffer);
 
-    // Can only be cleared _after_ publication so that the buffer isn't reused
-    self->receive_packet_ready = false;
+  while(received_byte_count) {
+    received_byte_count--;
+
+    uint8_t byte;
+    tiny_ring_buffer_remove(&self->received_byte_ring_buffer, &byte);
+
+    if(handle_received_byte(self, byte)) {
+      tiny_gea_interface_on_receive_args_t args;
+      args.packet = (const tiny_gea_packet_t*)self->receive_buffer;
+      tiny_event_publish(&self->on_receive, &args);
+      break;
+    }
   }
 
   if(self->send_completed) {
