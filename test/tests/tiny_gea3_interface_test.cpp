@@ -137,14 +137,38 @@ TEST_GROUP(tiny_gea3_interface)
 
   static void send_callback(void* context, tiny_gea_packet_t* packet)
   {
-    reinterpret(sourcePacket, context, const tiny_gea_packet_t*);
-    packet->source = sourcePacket->source;
-    memcpy(packet->payload, sourcePacket->payload, sourcePacket->payload_length);
+    reinterpret(source_packet, context, const tiny_gea_packet_t*);
+    packet->source = source_packet->source;
+    memcpy(packet->payload, source_packet->payload, source_packet->payload_length);
   }
 
   void when_packet_is_sent(tiny_gea_packet_t * packet)
   {
     tiny_gea_interface_send(&self.interface, packet->destination, packet->payload_length, packet, send_callback);
+  }
+
+  typedef struct
+  {
+    const tiny_gea_packet_t* source_packet;
+    uint8_t new_payload_length;
+  } send_with_payload_length_modified_context_t;
+
+  static void send_with_payload_length_modified_callback(void* _context, tiny_gea_packet_t* packet)
+  {
+    reinterpret(context, _context, const send_with_payload_length_modified_context_t*);
+    packet->payload_length = context->new_payload_length;
+    memcpy(packet->payload, context->source_packet->payload, context->new_payload_length);
+  }
+
+  void when_packet_is_sent_with_payload_length_modified(tiny_gea_packet_t * packet, uint8_t new_payload_length)
+  {
+    send_with_payload_length_modified_context_t context = { packet, new_payload_length };
+    tiny_gea_interface_send(
+      &self.interface,
+      packet->destination,
+      packet->payload_length,
+      &context,
+      send_with_payload_length_modified_callback);
   }
 
   void when_packet_is_forwarded(tiny_gea_packet_t * packet)
@@ -290,6 +314,24 @@ TEST(tiny_gea3_interface, should_send_a_packet_with_max_payload_given_send_buffe
   packet->payload[5] = 0x05;
   packet->payload[6] = 0x06;
   when_packet_is_sent(packet);
+}
+
+TEST(tiny_gea3_interface, should_allow_the_payload_length_to_be_modified_in_the_send_callback)
+{
+  should_send_bytes_via_uart(
+    tiny_gea_stx,
+    0x45, // dst
+    0x08, // len
+    address, // src
+    0xD5, // payload
+    0x21, // crc
+    0xD3,
+    tiny_gea_etx);
+
+  tiny_gea_STATIC_ALLOC_PACKET(packet, 3);
+  packet->destination = 0x45;
+  packet->payload[0] = 0xD5;
+  when_packet_is_sent_with_payload_length_modified(packet, 1);
 }
 
 TEST(tiny_gea3_interface, should_not_send_a_packet_that_is_too_large_for_the_send_queue)
