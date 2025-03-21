@@ -1,14 +1,14 @@
-add_library(tiny_gea3 INTERFACE)
+add_library(tiny_gea_api INTERFACE)
 
-target_sources(tiny_gea3 INTERFACE
+target_sources(tiny_gea_api INTERFACE
   ${CMAKE_CURRENT_LIST_DIR}/src/tiny_gea2_erd_client.c
-  ${CMAKE_CURRENT_LIST_DIR}/src/tiny_gea3_erd_client.c
+  ${CMAKE_CURRENT_LIST_DIR}/src/tiny_gea_api_erd_client.c
   ${CMAKE_CURRENT_LIST_DIR}/src/tiny_gea2_interface.c
-  ${CMAKE_CURRENT_LIST_DIR}/src/tiny_gea3_interface.c
+  ${CMAKE_CURRENT_LIST_DIR}/src/tiny_gea_api_interface.c
 )
 
-target_include_directories(tiny_gea3 INTERFACE ${CMAKE_CURRENT_LIST_DIR}/include)
+target_include_directories(tiny_gea_api INTERFACE ${CMAKE_CURRENT_LIST_DIR}/include)
 
-target_link_libraries(tiny_gea3 INTERFACE
+target_link_libraries(tiny_gea_api INTERFACE
   tiny
 )
