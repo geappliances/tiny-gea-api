@@ -13,7 +13,7 @@
       "maintainer": true
     }
   ],
-  "version": "3.0.3",
+  "version": "3.0.4",
   "frameworks": "*",
   "platforms": "*",
   "export": {
@@ -25,7 +25,7 @@
   "dependencies": [
     {
       "name": "tiny",
-      "version": "^7.0.1"
+      "version": "^7.1.3"
     }
   ]
 }
